@@ -1,0 +1,25 @@
+# QELO-X Configuration File
+# Localização padrão: ~/qelox/config.toml
+
+[node]
+binary_path = "/home/zeus/go-quai/build/bin/go-quai"
+base_dir    = "/home/zeus/go-quai"
+data_dir    = "/home/zeus/.go-quai-orchard"
+max_peers   = 25
+extra_args  = ["--node.environment=orchard"]
+
+[daemon]
+socket_path       = "/home/zeus/qelox/runtime/qelox.sock"
+lock_file         = "/home/zeus/qelox/runtime/qeloxd.lock"
+restart_delay_sec = 5
+max_restarts      = 0
+
+[monitor]
+interval_sec       = 2
+freeze_timeout_min = 10
+rpc_url            = "http://localhost:9200"
+
+[web]
+enabled = true
+port    = 9201
+bind    = "127.0.0.1"

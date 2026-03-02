@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QELO-X Dashboard</title>
+  <meta name="description" content="QELO-X — go-quai Node Orchestrator Dashboard. Monitor de métricas em tempo real." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">◈</span>
+        <span class="logo-text">QELO<span class="logo-accent">-X</span></span>
+        <span class="logo-sub">ORCHESTRATOR</span>
+      </div>
+      <div class="header-right">
+        <div class="node-badge" id="node-badge">
+          <span class="badge-dot" id="badge-dot"></span>
+          <span id="badge-text">CONNECTING…</span>
+        </div>
+        <div class="version-tag" id="version-tag">v1.1.0</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- CONTROLS -->
+    <section class="controls-section">
+      <button id="btn-start"   class="btn btn-start"   onclick="sendCommand('start')">
+        <span class="btn-icon">▶</span> Start
+      </button>
+      <button id="btn-stop"    class="btn btn-stop"    onclick="sendCommand('stop')">
+        <span class="btn-icon">■</span> Stop
+      </button>
+      <button id="btn-restart" class="btn btn-restart" onclick="sendCommand('restart')">
+        <span class="btn-icon">↺</span> Restart
+      </button>
+      <div class="cmd-feedback" id="cmd-feedback"></div>
+    </section>
+
+    <!-- TOP METRICS CARDS -->
+    <section class="grid grid-4">
+      <div class="card card-glow-green">
+        <div class="card-label">NODE STATUS</div>
+        <div class="card-value" id="node-state">—</div>
+        <div class="card-sub" id="node-uptime">uptime: —</div>
+      </div>
+      <div class="card card-glow-cyan">
+        <div class="card-label">BLOCK HEIGHT</div>
+        <div class="card-value mono" id="block-height">—</div>
+        <div class="card-sub" id="blocks-per-min">—</div>
+      </div>
+      <div class="card card-glow-blue">
+        <div class="card-label">PEERS</div>
+        <div class="card-value" id="peer-count">—</div>
+        <div class="card-sub" id="sync-status">—</div>
+      </div>
+      <div class="card card-glow-amber">
+        <div class="card-label">RESTARTS</div>
+        <div class="card-value" id="restarts">—</div>
+        <div class="card-sub" id="last-crash">—</div>
+      </div>
+    </section>
+
+    <!-- CPU / RAM -->
+    <section class="grid grid-2">
+      <div class="card">
+        <div class="card-label">CPU USAGE <span class="card-label-val" id="cpu-pct-label">—</span></div>
+        <div class="progress-bar-track">
+          <div class="progress-bar progress-cpu" id="cpu-bar"></div>
+        </div>
+        <div class="card-sub" id="load-avg">load avg: —</div>
+      </div>
+      <div class="card">
+        <div class="card-label">RAM USAGE <span class="card-label-val" id="ram-pct-label">—</span></div>
+        <div class="progress-bar-track">
+          <div class="progress-bar progress-ram" id="ram-bar"></div>
+        </div>
+        <div class="card-sub" id="ram-detail">system: — · go-quai: —</div>
+      </div>
+    </section>
+
+    <!-- DISK / NET / TXPOOL -->
+    <section class="grid grid-3">
+      <div class="card">
+        <div class="card-label">DISK (data dir)</div>
+        <div class="progress-bar-track">
+          <div class="progress-bar progress-disk" id="disk-bar"></div>
+        </div>
+        <div class="card-sub" id="disk-detail">— usado · — livre</div>
+      </div>
+      <div class="card">
+        <div class="card-label">NETWORK I/O</div>
+        <div class="card-value mono small" id="net-recv">↓ —</div>
+        <div class="card-value mono small" id="net-sent">↑ —</div>
+      </div>
+      <div class="card">
+        <div class="card-label">TX POOL</div>
+        <div class="card-row"><span class="card-key">Pending</span><span class="card-val mono" id="tx-pending">—</span></div>
+        <div class="card-row"><span class="card-key">Queued</span><span class="card-val mono" id="tx-queued">—</span></div>
+        <div class="card-row"><span class="card-key">Gas Price</span><span class="card-val mono" id="gas-price">—</span></div>
+      </div>
+    </section>
+
+    <!-- NODE INFO -->
+    <section class="grid grid-2">
+      <div class="card">
+        <div class="card-label">NODE INFO</div>
+        <div class="card-row"><span class="card-key">Network ID</span><span class="card-val mono" id="network-id">—</span></div>
+        <div class="card-row"><span class="card-key">Client</span><span class="card-val mono" id="client-version">—</span></div>
+        <div class="card-row"><span class="card-key">RPC URL</span><span class="card-val mono" id="rpc-url">—</span></div>
+      </div>
+      <div class="card">
+        <div class="card-label">SYSTEM</div>
+        <div class="card-row"><span class="card-key">Load 1m</span><span class="card-val mono" id="load1">—</span></div>
+        <div class="card-row"><span class="card-key">Load 5m</span><span class="card-val mono" id="load5">—</span></div>
+        <div class="card-row"><span class="card-key">Load 15m</span><span class="card-val mono" id="load15">—</span></div>
+      </div>
+    </section>
+
+    <!-- FREEZE ALERT (hidden by default) -->
+    <section class="alert-section" id="freeze-alert" style="display:none">
+      <div class="alert-box">
+        <span class="alert-icon">⚠</span>
+        <span id="freeze-msg">FREEZE DETECTADO — node sem novos blocos</span>
+      </div>
+    </section>
+
+    <!-- LOGS -->
+    <section class="logs-section">
+      <div class="logs-header">
+        <span class="card-label">DAEMON LOGS</span>
+        <div class="logs-controls">
+          <label class="logs-autoscroll">
+            <input type="checkbox" id="autoscroll" checked /> auto-scroll
+          </label>
+          <select id="tail-select" class="tail-select">
+            <option value="50">50 linhas</option>
+            <option value="100" selected>100 linhas</option>
+            <option value="200">200 linhas</option>
+            <option value="500">500 linhas</option>
+          </select>
+        </div>
+      </div>
+      <div class="logs-box" id="logs-box"></div>
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <span class="footer-left">QELO-X Orchestrator · <span id="footer-status">conectando…</span></span>
+    <span class="footer-right">última atualização: <span id="last-update">—</span></span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

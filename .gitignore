@@ -1,0 +1,31 @@
+# Binaries
+bin/
+qelox
+qeloxd
+
+# Logs
+logs/
+nodelogs/
+*.log
+
+# Runtime/Locks
+runtime/
+
+# IDEs and OS
+.vscode/
+.idea/
+.DS_Store
+
+# Go specific
+vendor/
+*.exe
+*.test
+*.prof
+
+# Workspace/Agent metadata
+.agents/
+.agent/
+_agents/
+_agent/
+.gemini/
+brain/

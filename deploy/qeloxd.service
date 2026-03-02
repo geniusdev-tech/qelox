@@ -1,0 +1,60 @@
+# Arquivo systemd para o daemon qeloxd (QELO-X Orchestrator)
+# Instalação:
+#   sudo cp deploy/qeloxd.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now qeloxd
+
+[Unit]
+Description=QELO-X — go-quai Node Orchestrator Daemon
+Documentation=https://github.com/zeus/qelox
+After=network-online.target local-fs.target
+Wants=network-online.target
+
+[Service]
+# IMPORTANTE: substitua 'zeus' pelo usuário real do node.
+User=zeus
+Group=zeus
+
+Type=simple
+ExecStart=/home/zeus/qelox/bin/qeloxd
+ExecStop=/bin/kill -TERM $MAINPID
+
+WorkingDirectory=/home/zeus/qelox
+Environment="HOME=/home/zeus"
+Environment="QELOX_CONFIG=/home/zeus/qelox/config.toml"
+
+# Restart automático
+Restart=always
+RestartSec=5s
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+# Limites de recursos (go-quai precisa de muitos fd)
+LimitNOFILE=1048576
+LimitNPROC=65536
+LimitMEMLOCK=infinity
+
+# Timeout de shutdown gracioso
+TimeoutStopSec=180
+KillMode=control-group
+KillSignal=SIGTERM
+FinalKillSignal=SIGKILL
+
+# Segurança (hardening)
+ProtectSystem=strict
+PrivateTmp=true
+NoNewPrivileges=true
+PrivateDevices=true
+RestrictNamespaces=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/home/zeus
+
+# Logs via journalctl -u qeloxd -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=qeloxd
+
+[Install]
+WantedBy=multi-user.target

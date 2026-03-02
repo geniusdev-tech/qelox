@@ -1,0 +1,10 @@
+github.com/BurntSushi/toml v1.3.2 h1:o7IhLm0Msx3BaB+n3Ag7L8EVlByGnpq14C4YWiu/gL8=
+github.com/BurntSushi/toml v1.3.2/go.mod h1:CxXYINrC8qfRyfy0YyJIKCi2pTy6lqq7RM3UkqhW7qs=
+github.com/charmbracelet/bubbles v0.18.0 h1:SoyiAezTq0BHaFCXcktTqHRgSIxsZ7YrNRnkFrxDZzI=
+github.com/charmbracelet/bubbles v0.18.0/go.mod h1:08qhZhtIwzgrtBjAcJnij1t1H0ZRjwHyGsy6AL11PSw=
+github.com/charmbracelet/bubbletea v0.26.1 h1:eEkJo98DLEMnVB7hxfKJkwrXlC2LQmHe9HMiQT0nPYU=
+github.com/charmbracelet/bubbletea v0.26.1/go.mod h1:3B8+P0lPDisplW4N/xoTMQ36oaHBkwGa3qnRGHm+j/a=
+github.com/charmbracelet/lipgloss v0.10.0 h1:KWeXFSexGcfahHX+54URiZGkBFazf70JNMtwg/AFW3s=
+github.com/charmbracelet/lipgloss v0.10.0/go.mod h1:Wig9s8nHKZsoxVol/scJVcxHe6fPRmxH7KSBNe0TKi8=
+github.com/shirou/gopsutil/v3 v3.24.2 h1:8hSRtCbFwByNGSPBsCByNCj0K7IM00FXbxs7uE3aTNI=
+github.com/shirou/gopsutil/v3 v3.24.2/go.mod h1:tSg/594BcA+8UdQU2XcW803GWYgdtauFFPgJCJoZmJE=
