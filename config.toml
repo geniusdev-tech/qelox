@@ -6,6 +6,7 @@ binary_path = "/home/zeus/go-quai/build/bin/go-quai"
 base_dir    = "/home/zeus/go-quai"
 data_dir    = "/home/zeus/.go-quai-orchard"
 max_peers   = 25
+auto_start  = true
 extra_args  = ["--node.environment=orchard"]
 
 [daemon]

@@ -91,7 +91,8 @@ func (s *Server) acceptLoop() {
 func (s *Server) handleConn(conn net.Conn) {
 	defer conn.Close()
 	var req Request
-	if err := json.NewDecoder(conn).Decode(&req); err != nil {
+	lr := io.LimitReader(conn, 4096)
+	if err := json.NewDecoder(lr).Decode(&req); err != nil {
 		if err != io.EOF {
 			s.log.Error("erro ao decodificar request", "error", err)
 		}
