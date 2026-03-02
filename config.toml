@@ -9,6 +9,7 @@ max_peers   = 25
 extra_args  = ["--node.environment=orchard"]
 
 [daemon]
+auto_start        = true
 socket_path       = "/home/zeus/qelox/runtime/qelox.sock"
 lock_file         = "/home/zeus/qelox/runtime/qeloxd.lock"
 restart_delay_sec = 5

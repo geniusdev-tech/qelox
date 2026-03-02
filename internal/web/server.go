@@ -51,6 +51,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/logs", s.handleLogs)
 	mux.HandleFunc("/api/command", s.handleCommand)
+	mux.HandleFunc("/api/health", s.handleHealth)
 
 	// SPA estática via embed.FS — serve index.html para qualquer rota não-API.
 	staticFS, err := fs.Sub(staticFiles, "static")
@@ -189,16 +190,20 @@ func httpError(w http.ResponseWriter, msg string, code int) {
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-// corsMiddleware adiciona headers CORS para dev local.
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		httpError(w, "método não permitido", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+// corsMiddleware adiciona headers CORS básicos.
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
+		// Retirado o wildcard '*' que deixava a API exposta a falhas de CORS
+		// Como a dashboard é servida estaticamente da mesma porta e host,
+		// origens irrestritas não são necessárias no ambiente produtivo local.
 		next.ServeHTTP(w, r)
 	})
 }

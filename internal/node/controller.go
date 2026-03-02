@@ -186,10 +186,11 @@ func (c *Controller) watchProcess() {
 func (c *Controller) Stop() error {
 	c.mu.Lock()
 
-	if c.state != StateRunning {
+	if c.state != StateRunning && c.state != StateCrashed {
 		c.mu.Unlock()
 		return fmt.Errorf("node não está rodando (state=%s)", c.state)
 	}
+	wasRunning := (c.state == StateRunning)
 	c.state = StateStopping
 
 	// Cancela restart pendente se houver.
@@ -198,35 +199,41 @@ func (c *Controller) Stop() error {
 	default:
 	}
 
-	proc := c.cmd.Process
-	c.log.Info("enviando SIGTERM", "pid", proc.Pid)
-	if err := proc.Signal(syscall.SIGTERM); err != nil {
-		c.mu.Unlock()
-		return err
-	}
-	c.mu.Unlock()
-
-	timeout := time.After(30 * time.Second)
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-waitLoop:
-	for {
-		select {
-		case <-timeout:
-			c.mu.Lock()
-			if c.state != StateStopped {
-				c.log.Warn("timeout — enviando SIGKILL")
-				proc.Kill()
-				c.state = StateStopped
-			}
+	if wasRunning {
+		proc := c.cmd.Process
+		c.log.Info("enviando SIGTERM", "pid", proc.Pid)
+		if err := proc.Signal(syscall.SIGTERM); err != nil {
 			c.mu.Unlock()
-			break waitLoop
-		case <-ticker.C:
-			if c.State() == StateStopped {
+			return err
+		}
+		c.mu.Unlock()
+
+		timeout := time.After(30 * time.Second)
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+
+	waitLoop:
+		for {
+			select {
+			case <-timeout:
+				c.mu.Lock()
+				if c.state != StateStopped {
+					c.log.Warn("timeout — enviando SIGKILL")
+					proc.Kill()
+					c.state = StateStopped
+				}
+				c.mu.Unlock()
 				break waitLoop
+			case <-ticker.C:
+				if c.State() == StateStopped {
+					break waitLoop
+				}
 			}
 		}
+	} else {
+		// Se estava crashado, apenas marca como parado e solta o lock principal
+		c.state = StateStopped
+		c.mu.Unlock()
 	}
 
 	c.mu.Lock()

@@ -145,10 +145,15 @@ func (m Model) View() string {
 	m.cpuProg.Width = w - 24
 	m.ramProg.Width = w - 24
 
+	peerStr := fmt.Sprintf("%d connected", met.PeerCount)
+	if met.PeerCount == -1 {
+		peerStr = "N/A"
+	}
+
 	body := styleBox.Width(w - 6).Render(lipgloss.JoinVertical(lipgloss.Left,
 		fmt.Sprintf("  %s  %s", styleLabelKey.Render("NODE STATUS"), stateStyle.Render(met.NodeState)),
 		row("SYNC STATUS", strings.ToUpper(met.SyncStatus)),
-		row("PEER COUNT", fmt.Sprintf("%d connected", met.PeerCount)),
+		row("PEER COUNT", peerStr),
 		row("BLOCK HEIGHT", fmt.Sprintf("#%d", met.BlockHeight)+frozen),
 		"\n",
 		row("CPU USAGE", fmt.Sprintf("%.1f%%", met.CPUPercent)),

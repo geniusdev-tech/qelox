@@ -21,6 +21,7 @@ vendor/
 *.exe
 *.test
 *.prof
+go.sum.bak
 
 # Workspace/Agent metadata
 .agents/
