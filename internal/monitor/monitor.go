@@ -281,8 +281,6 @@ func (m *Monitor) collect() {
 }
 
 func (m *Monitor) getGoQuaiPID() int {
-	entries, _ := io.ReadAll(strings.NewReader("")) // placeholder
-	_ = entries
 	// Procura em /proc pelo processo go-quai.
 	procs, err := process.Processes()
 	if err != nil {

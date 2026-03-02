@@ -167,10 +167,17 @@ func (c *Controller) watchProcess() {
 	c.log.Info("agendando restart", "delay", delay)
 
 	go func() {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
 		select {
-		case <-time.After(delay):
+		case <-timer.C:
 			c.mu.Lock()
 			defer c.mu.Unlock()
+			// Check if we're still in crashed state (prevent race where user triggered Start)
+			if c.state != StateCrashed {
+				c.log.Info("estado mudou, cancelando auto-restart")
+				return
+			}
 			c.lastRestartAt = time.Now()
 			c.log.Info("reiniciando go-quai após crash")
 			if err := c.launch(); err != nil {
@@ -186,17 +193,19 @@ func (c *Controller) watchProcess() {
 func (c *Controller) Stop() error {
 	c.mu.Lock()
 
-	if c.state != StateRunning {
-		c.mu.Unlock()
-		return fmt.Errorf("node não está rodando (state=%s)", c.state)
-	}
-	c.state = StateStopping
-
 	// Cancela restart pendente se houver.
 	select {
 	case c.stopRestart <- struct{}{}:
 	default:
 	}
+
+	if c.state != StateRunning {
+		// Just ensure state moves to stopped if it was crashed/starting
+		c.state = StateStopped
+		c.mu.Unlock()
+		return nil
+	}
+	c.state = StateStopping
 
 	proc := c.cmd.Process
 	c.log.Info("enviando SIGTERM", "pid", proc.Pid)

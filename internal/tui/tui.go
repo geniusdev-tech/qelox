@@ -148,7 +148,12 @@ func (m Model) View() string {
 	body := styleBox.Width(w - 6).Render(lipgloss.JoinVertical(lipgloss.Left,
 		fmt.Sprintf("  %s  %s", styleLabelKey.Render("NODE STATUS"), stateStyle.Render(met.NodeState)),
 		row("SYNC STATUS", strings.ToUpper(met.SyncStatus)),
-		row("PEER COUNT", fmt.Sprintf("%d connected", met.PeerCount)),
+		row("PEER COUNT", func() string {
+			if met.PeerCount == -1 {
+				return "N/A"
+			}
+			return fmt.Sprintf("%d connected", met.PeerCount)
+		}()),
 		row("BLOCK HEIGHT", fmt.Sprintf("#%d", met.BlockHeight)+frozen),
 		"\n",
 		row("CPU USAGE", fmt.Sprintf("%.1f%%", met.CPUPercent)),

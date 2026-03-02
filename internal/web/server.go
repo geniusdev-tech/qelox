@@ -51,6 +51,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/logs", s.handleLogs)
 	mux.HandleFunc("/api/command", s.handleCommand)
+	mux.HandleFunc("/api/health", s.handleHealth)
 
 	// SPA estática via embed.FS — serve index.html para qualquer rota não-API.
 	staticFS, err := fs.Sub(staticFiles, "static")
@@ -143,6 +144,14 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]interface{}{"lines": lines, "count": len(lines)})
 }
 
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		httpError(w, "método não permitido", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"status": "ok"})
+}
+
 func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		httpError(w, "método não permitido", http.StatusMethodNotAllowed)
@@ -192,7 +201,14 @@ func httpError(w http.ResponseWriter, msg string, code int) {
 // corsMiddleware adiciona headers CORS para dev local.
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+		// Allow requests with no origin (like simple server-to-server or local scripts)
+		// Or restrict it to a specific set of allowed origins.
+		// For a dashboard running on localhost/same machine, we typically want to restrict
+		// it to the same host that served the page or explicit localhost ports if needed.
+		if origin != "" && (strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:")) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == http.MethodOptions {
