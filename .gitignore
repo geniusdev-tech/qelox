@@ -1,40 +1,46 @@
-# Binaries
+# Binaries & Compiled Code
 bin/
 qelox
 qeloxd
-
-# Documentação e Relatórios
-*.pdf
-report*.html
-diag*.mmd
-s/
-nodelogs/
-*.log
-
-# Configuration
-config.toml
-!config.toml.example
-
-# Runtime/Locks
-runtime/
-
-# IDEs and OS
-.vscode/
-.idea/
-.DS_Store
-
-# Go specific
-vendor/
 *.exe
 *.test
 *.prof
-go.sum.bak
 
-# Workspace/Agent metadata
+# Logs & Telemetry
+logs/*.log
+nodelogs/
+*.log
+
+# Sensitive Configuration
+config.toml
+!config.toml.example
+.env
+.env.*
+
+# Runtime & Locks
+runtime/
+
+# Diagnostic & Temporary Reports
+*.pdf
+report*.html
+diag*.mmd
+
+# IDEs & OS Specific
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*~
+
+# Go Environment
+vendor/
+go.work
+go.work.sum
+
+# Workspace & Agent Metadata
 .agents/
 .agent/
 _agents/
 _agent/
 .gemini/
 brain/
-go.sum.bak
