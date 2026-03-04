@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -51,6 +52,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/logs", s.handleLogs)
 	mux.HandleFunc("/api/command", s.handleCommand)
+	mux.HandleFunc("/api/config/environment", s.handleEnvironment)
 	mux.HandleFunc("/api/health", s.handleHealth)
 
 	// SPA estática via embed.FS — serve index.html para qualquer rota não-API.
@@ -72,10 +74,15 @@ func (s *Server) Start() error {
 		fileServer.ServeHTTP(w, r)
 	}))
 
+	handler := corsMiddleware(mux)
+	if s.cfg.Web.Username != "" && s.cfg.Web.Password != "" {
+		handler = s.basicAuthMiddleware(handler)
+	}
+
 	addr := fmt.Sprintf("%s:%d", s.cfg.Web.Bind, s.cfg.Web.Port)
 	s.srv = &http.Server{
 		Addr:         addr,
-		Handler:      corsMiddleware(mux),
+		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -177,6 +184,65 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]interface{}{"ok": true})
 }
 
+func (s *Server) handleEnvironment(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		httpError(w, "método não permitido", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Environment string `json:"environment"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpError(w, "body inválido", http.StatusBadRequest)
+		return
+	}
+
+	env := strings.ToLower(strings.TrimSpace(body.Environment))
+	if env == "" {
+		httpError(w, "environment cannot be empty", http.StatusBadRequest)
+		return
+	}
+
+	s.logger.Info("mudando environment para", "env", env)
+
+	// 1. Pausa o nó
+	s.node.Stop()
+	time.Sleep(1 * time.Second) // Dá tempo para o processo morrer com calma
+
+	// 2. Atualiza config em memória
+	home, _ := os.UserHomeDir()
+
+	// Ajusta data-dir baseado no environment
+	s.cfg.Node.DataDir = fmt.Sprintf("%s/.go-quai-%s", home, env)
+
+	foundEnv := false
+	for i, arg := range s.cfg.Node.ExtraArgs {
+		if strings.HasPrefix(arg, "--node.environment=") {
+			s.cfg.Node.ExtraArgs[i] = "--node.environment=" + env
+			foundEnv = true
+		}
+	}
+	if !foundEnv {
+		s.cfg.Node.ExtraArgs = append(s.cfg.Node.ExtraArgs, "--node.environment="+env)
+	}
+
+	// 3. Salva no disco
+	if err := config.Save(s.cfg); err != nil {
+		s.logger.Error("falha ao salvar config", "error", err)
+		httpError(w, "falha ao salvar", http.StatusInternalServerError)
+		return
+	}
+
+	// 4. Reinicia o nó com nova config
+	if err := s.node.Start(); err != nil {
+		s.logger.Error("falha ao iniciar nova rede", "error", err)
+		writeJSON(w, map[string]interface{}{"ok": false, "error": err.Error()})
+		return
+	}
+
+	writeJSON(w, map[string]interface{}{"ok": true})
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 func writeJSON(w http.ResponseWriter, v interface{}) {
@@ -201,9 +267,19 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // corsMiddleware adiciona headers CORS básicos.
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Retirado o wildcard '*' que deixava a API exposta a falhas de CORS
-		// Como a dashboard é servida estaticamente da mesma porta e host,
-		// origens irrestritas não são necessárias no ambiente produtivo local.
+		next.ServeHTTP(w, r)
+	})
+}
+
+// basicAuthMiddleware exige usuário e senha definidos no config.toml
+func (s *Server) basicAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user, pass, ok := r.BasicAuth()
+		if !ok || user != s.cfg.Web.Username || pass != s.cfg.Web.Password {
+			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+			http.Error(w, "Não autorizado", http.StatusUnauthorized)
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }

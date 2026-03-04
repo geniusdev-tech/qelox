@@ -4,9 +4,9 @@
 [node]
 binary_path = "/home/zeus/go-quai/build/bin/go-quai"
 base_dir    = "/home/zeus/go-quai"
-data_dir    = "/home/zeus/.go-quai-cyprus1"
+data_dir    = "/home/zeus/.go-quai-colosseum"
 max_peers   = 25
-extra_args  = ["--node.environment=cyprus1", "--node.slices=[0 0]"]
+extra_args  = ["--node.environment=colosseum", "--node.slices=[0 0]"]
 
 [daemon]
 auto_start        = true

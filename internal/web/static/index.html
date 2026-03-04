@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,9 +8,12 @@
   <meta name="description" content="QELO-X — go-quai Node Orchestrator Dashboard. Monitor de métricas em tempo real." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
   <!-- HEADER -->
   <header class="header">
@@ -20,6 +24,13 @@
         <span class="logo-sub">ORCHESTRATOR</span>
       </div>
       <div class="header-right">
+        <select id="env-select" class="tail-select env-select" style="margin-right: 8px;"
+          onchange="changeEnvironment(this.value)">
+          <option value="cyprus">Cyprus</option>
+          <option value="colosseum">Colosseum</option>
+          <option value="orchard">Orchard</option>
+          <option value="garden">Garden</option>
+        </select>
         <div class="node-badge" id="node-badge">
           <span class="badge-dot" id="badge-dot"></span>
           <span id="badge-text">CONNECTING…</span>
@@ -34,10 +45,10 @@
 
     <!-- CONTROLS -->
     <section class="controls-section">
-      <button id="btn-start"   class="btn btn-start"   onclick="sendCommand('start')">
+      <button id="btn-start" class="btn btn-start" onclick="sendCommand('start')">
         <span class="btn-icon">▶</span> Start
       </button>
-      <button id="btn-stop"    class="btn btn-stop"    onclick="sendCommand('stop')">
+      <button id="btn-stop" class="btn btn-stop" onclick="sendCommand('stop')">
         <span class="btn-icon">■</span> Stop
       </button>
       <button id="btn-restart" class="btn btn-restart" onclick="sendCommand('restart')">
@@ -48,6 +59,18 @@
 
     <!-- TOP METRICS CARDS -->
     <section class="grid grid-4">
+      <div class="card" id="health-card">
+        <div class="card-label">HEALTH SCORE</div>
+        <div class="health-circle-wrap">
+          <svg class="health-circle" viewBox="0 0 36 36">
+            <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+            <path class="circle-path" id="health-path" stroke-dasharray="0, 100"
+              d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+          </svg>
+          <div class="health-text" id="health-score">—</div>
+        </div>
+        <div class="card-sub" id="health-status">calculando...</div>
+      </div>
       <div class="card card-glow-green">
         <div class="card-label">NODE STATUS</div>
         <div class="card-value" id="node-state">—</div>
@@ -102,11 +125,14 @@
         <div class="card-value mono small" id="net-recv">↓ —</div>
         <div class="card-value mono small" id="net-sent">↑ —</div>
       </div>
-      <div class="card">
-        <div class="card-label">TX POOL</div>
-        <div class="card-row"><span class="card-key">Pending</span><span class="card-val mono" id="tx-pending">—</span></div>
-        <div class="card-row"><span class="card-key">Queued</span><span class="card-val mono" id="tx-queued">—</span></div>
-        <div class="card-row"><span class="card-key">Gas Price</span><span class="card-val mono" id="gas-price">—</span></div>
+      <div class="card" id="process-card">
+        <div class="card-label">PROCESS INFO</div>
+        <div class="card-row"><span class="card-key">TCP Sockets (Peers)</span><span class="card-val mono"
+            id="tcp-sockets">—</span></div>
+        <div class="card-row"><span class="card-key">Active Threads</span><span class="card-val mono"
+            id="active-threads">—</span></div>
+        <div class="card-row"><span class="card-key">Target Slice</span><span class="card-val mono"
+            id="target-slice">—</span></div>
       </div>
     </section>
 
@@ -114,15 +140,19 @@
     <section class="grid grid-2">
       <div class="card">
         <div class="card-label">NODE INFO</div>
-        <div class="card-row"><span class="card-key">Network ID</span><span class="card-val mono" id="network-id">—</span></div>
-        <div class="card-row"><span class="card-key">Client</span><span class="card-val mono" id="client-version">—</span></div>
-        <div class="card-row"><span class="card-key">RPC URL</span><span class="card-val mono" id="rpc-url">—</span></div>
+        <div class="card-row"><span class="card-key">Network ID</span><span class="card-val mono"
+            id="network-id">—</span></div>
+        <div class="card-row"><span class="card-key">Client</span><span class="card-val mono"
+            id="client-version">—</span></div>
+        <div class="card-row"><span class="card-key">RPC URL</span><span class="card-val mono" id="rpc-url">—</span>
+        </div>
       </div>
       <div class="card">
         <div class="card-label">SYSTEM</div>
         <div class="card-row"><span class="card-key">Load 1m</span><span class="card-val mono" id="load1">—</span></div>
         <div class="card-row"><span class="card-key">Load 5m</span><span class="card-val mono" id="load5">—</span></div>
-        <div class="card-row"><span class="card-key">Load 15m</span><span class="card-val mono" id="load15">—</span></div>
+        <div class="card-row"><span class="card-key">Load 15m</span><span class="card-val mono" id="load15">—</span>
+        </div>
       </div>
     </section>
 
@@ -163,4 +193,5 @@
 
   <script src="app.js"></script>
 </body>
+
 </html>

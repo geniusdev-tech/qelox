@@ -52,8 +52,10 @@ type Metrics struct {
 	NetRecvBytes uint64 `json:"net_recv_bytes"`
 	NetSentBytes uint64 `json:"net_sent_bytes"`
 
-	// RAM específica do processo go-quai
-	GoQuaiRAMBytes uint64 `json:"go_quai_ram_bytes"`
+	// RAM e Processo específica do go-quai
+	GoQuaiRAMBytes   uint64 `json:"go_quai_ram_bytes"`
+	GoQuaiThreads    int32  `json:"go_quai_threads"`
+	GoQuaiTCPSockets int    `json:"go_quai_tcp_sockets"`
 
 	// Node RPC
 	BlockHeight       uint64 `json:"block_height"`
@@ -64,6 +66,11 @@ type Metrics struct {
 	GasPrice          string `json:"gas_price"`
 	NetworkID         string `json:"network_id"`
 	NodeClientVersion string `json:"node_client_version"`
+	RPCURL            string `json:"rpc_url"`
+
+	// Saúde
+	HealthScore int  `json:"health_score"`
+	LowPeers    bool `json:"low_peers"`
 
 	// Operacional
 	Frozen          bool      `json:"frozen"`
@@ -71,6 +78,8 @@ type Metrics struct {
 	BlocksPerMinute float64   `json:"blocks_per_minute"`
 	LastRestartAt   time.Time `json:"last_restart_at,omitempty"`
 	LastCrashReason string    `json:"last_crash_reason,omitempty"`
+	CurrentEnv      string    `json:"current_env"`
+	SliceID         string    `json:"slice_id"`
 }
 
 // Monitor gerencia o loop de coleta.
@@ -157,13 +166,26 @@ func (m *Monitor) loop() {
 }
 
 func (m *Monitor) collect() {
+	var currentEnv, sliceID string
+	for _, arg := range m.cfg.Node.ExtraArgs {
+		if strings.HasPrefix(arg, "--node.environment=") {
+			currentEnv = strings.TrimPrefix(arg, "--node.environment=")
+		}
+		if strings.HasPrefix(arg, "--node.slices=") {
+			sliceID = strings.TrimPrefix(arg, "--node.slices=")
+		}
+	}
+
 	metrics := Metrics{
 		Timestamp:       time.Now(),
 		NodeState:       m.node.State().String(),
+		CurrentEnv:      currentEnv,
+		SliceID:         sliceID,
 		Uptime:          m.node.Uptime().Round(time.Second).String(),
 		Restarts:        m.node.Restarts(),
 		LastRestartAt:   m.node.LastRestartAt(),
 		LastCrashReason: m.node.LastCrashReason(),
+		RPCURL:          m.cfg.Monitor.RPCURL,
 	}
 
 	// FIX: cpu.Percent bloqueante (100ms) chamado FORA do lock principal.
@@ -218,12 +240,25 @@ func (m *Monitor) collect() {
 		m.prevNetSent = sent
 	}
 
-	// RAM do processo go-quai especificamente.
+	// RAM e Métricas do processo go-quai especificamente.
 	if m.node.IsRunning() {
 		if pid := m.getGoQuaiPID(); pid > 0 {
 			if p, err := process.NewProcess(int32(pid)); err == nil {
 				if mi, err := p.MemoryInfo(); err == nil {
 					metrics.GoQuaiRAMBytes = mi.RSS
+				}
+				if numThreads, err := p.NumThreads(); err == nil {
+					metrics.GoQuaiThreads = numThreads
+				}
+				if conns, err := p.Connections(); err == nil {
+					// Conta apenas sockets TCP ESTABELECIDOS (status "ESTABLISHED" no linux = 1)
+					var established int
+					for _, c := range conns {
+						if c.Type == 1 && c.Status == "ESTABLISHED" {
+							established++
+						}
+					}
+					metrics.GoQuaiTCPSockets = established
 				}
 			}
 		}
@@ -272,9 +307,41 @@ func (m *Monitor) collect() {
 			}
 		}
 	} else {
-		// FIX: zerar estado de freeze quando node não está rodando.
+		// Zerar estado de freeze e altura quando node não está rodando,
+		// para que blocos pós-reinício sejam corretamente detectados.
+		m.lastHeight = 0
 		m.lastHeightAt = time.Time{}
 		m.heightWindow = nil
+	}
+
+	// Calcula Health Score
+	if !m.node.IsRunning() || metrics.Frozen {
+		metrics.HealthScore = 0
+	} else {
+		score := 100
+
+		// Penalidade de Peers
+		metrics.LowPeers = metrics.GoQuaiTCPSockets < m.cfg.Monitor.MinPeers
+		if metrics.LowPeers {
+			diff := m.cfg.Monitor.MinPeers - metrics.GoQuaiTCPSockets
+			score -= diff * 3
+		}
+
+		// Penalidade de Recursos
+		if metrics.CPUPercent > 90 {
+			score -= 10
+		}
+		if metrics.RAMPercent > 90 {
+			score -= 10
+		}
+		if metrics.DiskUsedPct > 95 {
+			score -= 20
+		}
+
+		if score < 0 {
+			score = 0
+		}
+		metrics.HealthScore = score
 	}
 
 	m.current = metrics
@@ -303,13 +370,18 @@ func (m *Monitor) queryNodeMetrics() (blockHeight uint64, peers int, syncStatus 
 	peers = -1 // -1 = API indisponível nesta versão
 	syncStatus = "synced"
 
-	// 1. Block Number
+	// 1. Block Number — retorna hexutil.Uint64 sem parâmetros.
+	//    O resultado JSON vem como string hex tipo "0x1a2b".
 	if res, err := m.rpcCall(rpcURL, "quai_blockNumber", nil); err == nil {
-		if s, ok := res.(string); ok {
-			s = strings.TrimPrefix(s, "0x")
+		switch v := res.(type) {
+		case string:
+			// TrimPrefix case-insensitive para cobrir "0X..." eventualmente.
+			s := strings.TrimPrefix(strings.ToLower(v), "0x")
 			if val, err := strconv.ParseUint(s, 16, 64); err == nil {
 				blockHeight = val
 			}
+		case float64: // fallback caso o decoder JSON retorne número
+			blockHeight = uint64(v)
 		}
 	}
 

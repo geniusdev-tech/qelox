@@ -42,13 +42,16 @@ type MonitorConfig struct {
 	IntervalSec      int    `toml:"interval_sec"`
 	FreezeTimeoutMin int    `toml:"freeze_timeout_min"`
 	RPCURL           string `toml:"rpc_url"`
+	MinPeers         int    `toml:"min_peers"`
 }
 
 // WebConfig — dashboard web embutido.
 type WebConfig struct {
-	Enabled bool   `toml:"enabled"`
-	Port    int    `toml:"port"`
-	Bind    string `toml:"bind"`
+	Enabled  bool   `toml:"enabled"`
+	Port     int    `toml:"port"`
+	Bind     string `toml:"bind"`
+	Username string `toml:"username"`
+	Password string `toml:"password"`
 }
 
 // Load procura config.toml em ~/qelox/config.toml.
@@ -68,6 +71,24 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	return cfg, validate(cfg)
+}
+
+// Save grava a configuração atual de volta no disk.
+func Save(cfg *Config) error {
+	if err := validate(cfg); err != nil {
+		return err
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(home, "qelox", "config.toml")
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return toml.NewEncoder(f).Encode(cfg)
 }
 
 func defaults() *Config {
@@ -90,11 +111,14 @@ func defaults() *Config {
 			IntervalSec:      2,
 			FreezeTimeoutMin: 10,
 			RPCURL:           "http://localhost:9200",
+			MinPeers:         10,
 		},
 		Web: WebConfig{
-			Enabled: true,
-			Port:    9201,
-			Bind:    "127.0.0.1",
+			Enabled:  true,
+			Port:     9201,
+			Bind:     "127.0.0.1",
+			Username: "",
+			Password: "",
 		},
 	}
 }

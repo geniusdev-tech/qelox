@@ -27,6 +27,10 @@ function startPolling() {
 async function fetchMetrics() {
     try {
         const res = await fetch(API.metrics);
+        if (res.status === 401) {
+            setFooter('requer autenticação (atualize a página)', '#f43f5e');
+            return;
+        }
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const m = await res.json();
         renderMetrics(m);
@@ -86,15 +90,60 @@ function renderMetrics(m) {
     setText('net-recv', '↓ ' + fmtBytes(m.net_recv_bytes || 0) + '/s');
     setText('net-sent', '↑ ' + fmtBytes(m.net_sent_bytes || 0) + '/s');
 
-    // TxPool
-    setText('tx-pending', m.tx_pending ?? '—');
-    setText('tx-queued', m.tx_queued ?? '—');
-    setText('gas-price', m.gas_price || '—');
+    // Health Score
+    const hScore = m.health_score || 0;
+    setText('health-score', hScore);
+    const hPath = document.getElementById('health-path');
+    const hCard = document.getElementById('health-card');
+    if (hPath) {
+        hPath.style.strokeDasharray = `${hScore}, 100`;
+        if (hScore >= 90) {
+            hPath.style.stroke = 'var(--brand)';
+            if (hCard) hCard.className = 'card card-glow-green';
+            setText('health-status', 'Excelente');
+        } else if (hScore >= 70) {
+            hPath.style.stroke = 'var(--amber)';
+            if (hCard) hCard.className = 'card card-glow-amber';
+            setText('health-status', 'Atenção');
+        } else {
+            hPath.style.stroke = 'var(--red)';
+            if (hCard) hCard.className = 'card card-warn';
+            setText('health-status', 'Crítico');
+        }
+    }
+
+    // Process Info (Substituindo TxPool inativo na API)
+    setText('tcp-sockets', m.go_quai_tcp_sockets ?? '—');
+    setText('active-threads', m.go_quai_threads ?? '—');
+    setText('target-slice', m.slice_id || 'Global');
+
+    // Alerta piscante de Peers
+    const pCard = document.getElementById('process-card');
+    if (pCard) {
+        if (m.low_peers) {
+            pCard.classList.add('card-warn');
+        } else {
+            pCard.classList.remove('card-warn');
+        }
+    }
+
+    // Peer Count Fallback usando os Sockets:
+    if (m.peer_count === -1 && m.go_quai_tcp_sockets > 0) {
+        setText('peer-count', `~${m.go_quai_tcp_sockets}`);
+    }
 
     // Node info
     setText('network-id', m.network_id || '—');
     setText('client-version', m.node_client_version || '—');
-    setText('rpc-url', '—'); // not exposed in metrics, static label
+    setText('rpc-url', m.rpc_url || '—');
+
+    // Environment Select
+    if (m.current_env) {
+        const sel = document.getElementById('env-select');
+        if (sel && sel.value !== m.current_env && document.activeElement !== sel) {
+            sel.value = m.current_env;
+        }
+    }
 
     // Freeze alert
     const freezeEl = document.getElementById('freeze-alert');
@@ -171,6 +220,34 @@ function showFeedback(msg, cls) {
     fb.textContent = msg;
     fb.className = `cmd-feedback ${cls} show`;
     setTimeout(() => { fb.className = 'cmd-feedback'; }, 3500);
+}
+
+// ── Environment ───────────────────────────────────────────────────────
+async function changeEnvironment(env) {
+    if (!confirm(`Mudar a rede para ${env.toUpperCase()}? O nó será pausado, o config reescrito e iniciado automaticamente.`)) {
+        setTimeout(fetchMetrics, 100);
+        return;
+    }
+    const fb = document.getElementById('cmd-feedback');
+    fb.className = 'cmd-feedback';
+    fb.textContent = 'Migrando...';
+
+    try {
+        const res = await fetch('/api/config/environment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ environment: env }),
+        });
+        const data = await res.json();
+        if (data.ok || res.ok) {
+            showFeedback(`✓ Migrado para ${env}`, 'ok');
+        } else {
+            showFeedback(`✗ Erro: ${data.error}`, 'err');
+        }
+    } catch (e) {
+        showFeedback('✗ daemon indisponível', 'err');
+    }
+    setTimeout(fetchMetrics, 2000);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
