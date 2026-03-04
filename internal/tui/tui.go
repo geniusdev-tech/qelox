@@ -183,6 +183,7 @@ func (m Model) View() string {
 		fmt.Sprintf(" %s %s", styleLabelKey.Render("NODE STATUS"), stateStyle.Render(met.NodeState)),
 		row("SYNC STATUS", strings.ToUpper(met.SyncStatus)),
 		row("PEER COUNT", peerStr),
+
 		row("BLOCK HEIGHT", fmt.Sprintf("#%d", met.BlockHeight)+frozen),
 		row("TCP SOCKETS", fmt.Sprintf("%d", met.GoQuaiTCPSockets)),
 		row("ACTIVE THREADS", fmt.Sprintf("%d", met.GoQuaiThreads)),

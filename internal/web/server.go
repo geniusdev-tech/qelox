@@ -51,7 +51,6 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/stats", s.handleMetrics)
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/logs", s.handleLogs)
-	mux.HandleFunc("/api/command", s.handleCommand)
 	mux.HandleFunc("/api/config/environment", s.handleEnvironment)
 	mux.HandleFunc("/api/health", s.handleHealth)
 
@@ -149,6 +148,14 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	lines := s.logger.Tail(tailN)
 	writeJSON(w, map[string]interface{}{"lines": lines, "count": len(lines)})
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		httpError(w, "método não permitido", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"status": "ok"})
 }
 
 func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
@@ -256,17 +263,19 @@ func httpError(w http.ResponseWriter, msg string, code int) {
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		httpError(w, "método não permitido", http.StatusMethodNotAllowed)
-		return
-	}
-	writeJSON(w, map[string]string{"status": "ok"})
-}
-
 // corsMiddleware adiciona headers CORS básicos.
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" && (strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:")) {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }

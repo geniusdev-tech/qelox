@@ -30,3 +30,4 @@ _agents/
 _agent/
 .gemini/
 brain/
+go.sum.bak

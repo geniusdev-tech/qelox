@@ -94,6 +94,7 @@ func (s *Server) handleConn(conn net.Conn) {
 	// FIX: limit input size to 4KB to prevent unbounded payload DoS
 	limitReader := io.LimitReader(conn, 4096)
 	if err := json.NewDecoder(limitReader).Decode(&req); err != nil {
+
 		if err != io.EOF {
 			s.log.Error("erro ao decodificar request", "error", err)
 		}

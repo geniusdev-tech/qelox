@@ -167,10 +167,17 @@ func (c *Controller) watchProcess() {
 	c.log.Info("agendando restart", "delay", delay)
 
 	go func() {
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
 		select {
-		case <-time.After(delay):
+		case <-timer.C:
 			c.mu.Lock()
 			defer c.mu.Unlock()
+			// Check if we're still in crashed state (prevent race where user triggered Start)
+			if c.state != StateCrashed {
+				c.log.Info("estado mudou, cancelando auto-restart")
+				return
+			}
 			c.lastRestartAt = time.Now()
 			c.log.Info("reiniciando go-quai após crash")
 			if err := c.launch(); err != nil {

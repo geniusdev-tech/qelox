@@ -60,3 +60,5 @@ journalctl -u qeloxd -f
 | X | Stop |
 | R | Restart |
 | Q | Quit |
+
+Veja o guia completo na interface web do QELO-X.
