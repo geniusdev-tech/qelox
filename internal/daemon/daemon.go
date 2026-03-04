@@ -1,6 +1,6 @@
-// Package daemon — núcleo do qeloxd.
-// Orquestra o socket server, node controller, monitor e web dashboard,
-// com graceful shutdown e tratamento de sinais do SO.
+// Package daemon — qeloxd core.
+// Orchestrates the socket server, node controller, monitor, and web dashboard,
+// with graceful shutdown and OS signal handling.
 package daemon
 
 import (
@@ -18,7 +18,7 @@ import (
 	"github.com/zeus/qelox/internal/web"
 )
 
-// Daemon é o objeto principal do processo qeloxd.
+// Daemon is the main object of the qeloxd process.
 type Daemon struct {
 	cfg    *config.Config
 	log    *log.Logger
@@ -29,7 +29,7 @@ type Daemon struct {
 	lock   *os.File
 }
 
-// New constrói um Daemon com todas as dependências injetadas.
+// New constructs a Daemon with all dependencies injected.
 func New(cfg *config.Config, logger *log.Logger) *Daemon {
 	nc := node.New(cfg, logger)
 	mon := monitor.New(cfg, nc, logger)
@@ -41,12 +41,12 @@ func New(cfg *config.Config, logger *log.Logger) *Daemon {
 	return &Daemon{cfg: cfg, log: logger, node: nc, mon: mon, server: srv, web: webSrv}
 }
 
-// Run bloqueia até receber sinal de shutdown.
+// Run blocks until a shutdown signal is received.
 func (d *Daemon) Run() error {
 	// Criar diretório de runtime se não existir.
 	rdir := filepath.Dir(d.cfg.Daemon.SocketPath)
 	if err := os.MkdirAll(rdir, 0750); err != nil {
-		return fmt.Errorf("falha ao criar runtime dir: %w", err)
+		return fmt.Errorf("failed to create runtime dir: %w", err)
 	}
 
 	// Adquire lock de instância única.
@@ -60,7 +60,7 @@ func (d *Daemon) Run() error {
 
 	// Inicia socket server.
 	if err := d.server.Start(); err != nil {
-		return fmt.Errorf("falha ao iniciar socket: %w", err)
+		return fmt.Errorf("failed to start socket: %w", err)
 	}
 	defer d.server.Stop()
 
@@ -72,7 +72,7 @@ func (d *Daemon) Run() error {
 	if d.web != nil {
 		if err := d.web.Start(); err != nil {
 			// Não fatal — apenas loga e continua.
-			d.log.Error("falha ao iniciar web dashboard", "error", err)
+			d.log.Error("failed to start web dashboard", "error", err)
 		} else {
 			defer d.web.Stop()
 		}
@@ -81,23 +81,23 @@ func (d *Daemon) Run() error {
 	// Auto-start do node se configurado.
 	if d.cfg.Node.AutoStart {
 		if err := d.node.Start(); err != nil {
-			d.log.Error("falha no auto-start do node", "error", err)
+			d.log.Error("failed node auto-start", "error", err)
 		}
 	}
 
-	d.log.Info("daemon pronto", "socket", d.cfg.Daemon.SocketPath)
+	d.log.Info("daemon ready", "socket", d.cfg.Daemon.SocketPath)
 
 	// Aguarda sinal de shutdown.
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGTERM, syscall.SIGINT)
 	sig := <-ch
-	d.log.Info("sinal recebido — graceful shutdown", "signal", sig.String())
+	d.log.Info("signal received — graceful shutdown", "signal", sig.String())
 
 	// Para o node se estiver rodando.
 	if d.node.IsRunning() {
-		d.log.Info("parando go-quai...")
+		d.log.Info("stopping go-quai...")
 		if err := d.node.Stop(); err != nil {
-			d.log.Error("erro ao parar node", "error", err)
+			d.log.Error("error stopping node", "error", err)
 		}
 	}
 
@@ -108,11 +108,11 @@ func (d *Daemon) Run() error {
 func (d *Daemon) acquireLock() error {
 	f, err := os.OpenFile(d.cfg.Daemon.LockFile, os.O_CREATE|os.O_RDWR, 0640)
 	if err != nil {
-		return fmt.Errorf("falha ao abrir lock file: %w", err)
+		return fmt.Errorf("failed to open lock file: %w", err)
 	}
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		f.Close()
-		return fmt.Errorf("outra instância do qeloxd já está rodando")
+		return fmt.Errorf("another instance of qeloxd is already running")
 	}
 	fmt.Fprintf(f, "%d\n", os.Getpid())
 	d.lock = f

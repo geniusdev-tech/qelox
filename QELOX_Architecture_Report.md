@@ -1,91 +1,91 @@
-# Relatório de Arquitetura e Engenharia do QELO-X
+# QELO-X Architecture and Engineering Report
 
-Data: 04 de Março de 2026
+Date: March 04, 2026
 
-## 1. Visão Geral (SaaS Node Operator)
-O **QELO-X** evoluiu consideravelmente sua maturação para atuar como o principal proxy orquestrador para os nós da **Quai Network** (go-quai). Diferentemente de meros scripts em bash, este software foi portado plenamente para a linguagem Go (Golang), garantindo:
+## 1. Overview (SaaS Node Operator)
+**QELO-X** has matured into the primary orchestrator proxy for **Quai Network** nodes (go-quai). Far beyond simple bash scripts, this software is fully ported to Go (Golang), ensuring:
 
-*   **Thread Safety:** Com controle refinado via Mutex na orquestração dos subprocessos, evitamos vazamento de memória e file descriptors.
-*   **Acesso Múltiplo Transparente:** As bibliotecas do núcleo provém dados semáforos, permitindo que a visualização na interface TUI (Terminal) e interface Web (HTTP Dashboard) operem de forma limpa e paralela.
+*   **Thread Safety:** Refined control via Mutexes in subprocess orchestration prevents memory and file descriptor leaks.
+*   **Transparent Multi-Access:** Core libraries provide semaphore data, allowing the TUI (Terminal) and Web Dashboard interfaces to operate cleanly in parallel.
 
 ---
 
-## 2. Diagrama da Arquitetura Cérebro-Espinhal
+## 2. Core Architecture Diagram
 
-O fluxo operacional entre o System Daemon, os coletores de telemetria e a camada de apresentação gráfica pode ser modelado abaixo:
+The operational flow between the System Daemon, telemetry collectors, and the graphical presentation layer is modeled below:
 
 ```mermaid
 graph TD
-    Systemd[Linux Systemd `qeloxd.service`] -->|Mantém Vivo| QeloxDaemon(Qelox Daemon Main)
+    Systemd[Linux Systemd `qeloxd.service`] -->|Maintains Alive| QeloxDaemon(Qelox Daemon Main)
     
-    QeloxDaemon -->|Incia| ConfigManager{Config Manager `.toml`}
-    QeloxDaemon -->|Gerencia| NodeController(Node Controller)
-    QeloxDaemon -->|Coleta de 2s em 2s| MonitorModule(Monitor Module)
-    QeloxDaemon -->|Serve API 9200| SocketServer[UNIX/TCP Sockets]
-    QeloxDaemon -->|Serve Web 9201| WebServer[Web UI Server Auth]
+    QeloxDaemon -->|Loads| ConfigManager{Config Manager `.toml`}
+    QeloxDaemon -->|Manages| NodeController(Node Controller)
+    QeloxDaemon -->|Collects every 2s| MonitorModule(Monitor Module)
+    QeloxDaemon -->|Serves API 9200| SocketServer[UNIX/TCP Sockets]
+    QeloxDaemon -->|Serves Web 9201| WebServer[Web UI Server Auth]
     
-    NodeController -->|Gera/Spawna Subprocesso| GoQuaiProcess[Processo: `go-quai`]
-    GoQuaiProcess -->|Log Data| Nodelogs[(Arquivos go-quai.log)]
+    NodeController -->|Spawns Subprocess| GoQuaiProcess[Process: `go-quai`]
+    GoQuaiProcess -->|Log Data| Nodelogs[(go-quai.log Files)]
     
     MonitorModule -->|Process CPU/RAM info| OS_Sensors(OS Sensors `gopsutil`)
     MonitorModule -->|RPC Calls| GoQuaiProcess
     
-    UI_TUI(TUI Client Bubble Tea) <-->|Conecta vía Socket.sock| SocketServer
-    UI_Web(Browser Web Client App.js) <-->|Conecta API Basic Auth| WebServer
+    UI_TUI(TUI Client Bubble Tea) <-->|Connects via Socket.sock| SocketServer
+    UI_Web(Browser Web Client App.js) <-->|Connects via Basic Auth API| WebServer
     
     OS_Sensors -.-> MonitorModule
 ```
 
 ---
 
-## 3. Lógica de Saúde do Nó (Health Score)
+## 3. Node Health Logic (Health Score)
 
-Uma das métricas centrais do projeto na versão SaaS para Operadores é o inovador monitoramento *Health Score* agregado ao alerta dinâmico de conexões ponto-a-ponto (*Low Peer Count*).
+A central feature of the SaaS version for Operators is the innovative *Health Score* monitoring aggregated with the dynamic *Low Peer Count* alert.
 
-### Especificações do Escopo Matemático:
-O sistema processa (via `internal/monitor/monitor.go`) uma análise da saúde do motor do nó:
+### Mathematical Scope Specifications:
+The system calculates health (via `internal/monitor/monitor.go`) based on an analysis of the node engine:
 
-1. **Estado do Motor**
-   - Caso o estado da máquina de estado do Controlador seja diferento de RUNNING (Start, Stop, Crash), a Saúde é forçada para `0%`.
-   - Se o Módulo de Monitoramento acusar que não houveram *Appending Blocks* em um espaço de tempo (`Frozen = true`), a Saúde é forçada para `0%`.
+1. **Engine State**
+   - If the Controller state machine is not RUNNING (e.g., Start, Stop, Crash), Health is forced to `0%`.
+   - If the Monitoring Module detects no *Appending Blocks* over time (`Frozen == true`), Health is forced to `0%`.
 
-2. **Cálculos Baseados na Qualidade**
-   - Se estiver online e processando os blocos, o nó atinge pontuação base = `100`.
-   - **Peers Assessment (Tolerância P2P):** É checada a quantidade bruta de conexões estabelidas em nível Kernel (`TCP Sockets`). Subtrai-se em `3 pontos` por cada *socket* faltando abaixo do índice seguro (Configurado de forma customizável em `min_peers = 10`). 
-   - **Recursos Máquina:** Subtrai `-10 pts` para picos maiores que 90% em RAM ou CPU, e `-20 pts` caso o SSD/HDD ultrapasse 95% de estresse (A Quai demanda espaço considerável).
+2. **Quality-Based Calculations**
+   - If online and syncing blocks, the base score starts at `100`.
+   - **P2P Assessment (Connection Tolerance):** Raw established connections are checked at the Kernel level (`TCP Sockets`). `3 points` are subtracted for each missing socket below the safe index (Customizable via `min_peers = 10`).
+   - **System Resources:** Subtractions of `-10 pts` for CPU/RAM spikes above 90%, and `-20 pts` if SSD/HDD stress exceeds 95% (Quai demands significant storage).
 
 ---
 
-## 4. O Mecanismo Automático de Ambiente (Smart Routing)
+## 4. Smart Environment Routing
 
-Para facilitar a comutação das cadeias ativas na Rede de Testes da Quai, injetamos fluxos de reinício controlado no endpoint `/api/config/environment`. Ao engatilhar, o Go (Sem precisar matar o orquestrador primário systemd):
-- Envia o sinal `SIGTERM` orgânico e seguro ao nó respectável.
-- Varre o arquivo local do usuário modificando a linha `--node.environment=` para a variante requesitada (`colosseum`, `garden`, `orchard` ou `cyprus`).
-- Cria e remaneja automaticamente a pasta *Chain Data Dir* (`~/.go-quai-ambiente`) para nunca corromper ou misturar arquivos DB de cadeias distintas.
-- Reinicia o fluxo de Start automaticamente.
+To facilitate switching between Quai Testnet chains, we injected controlled restart flows into the `/api/config/environment` endpoint. When triggered:
+- Sends an organic `SIGTERM` signal to the node.
+- Scans the local user file, modifying the `--node.environment=` line to the requested variant (`colosseum`, `garden`, `orchard`, or `cyprus`).
+- Automatically creates and reassigns the *Chain Data Dir* (`~/.go-quai-env`) to prevent corruption or mixing DB files from different chains.
+- Restarts the Start flow automatically.
 
 ```mermaid
 sequenceDiagram
-    participant Operador (Navegador)
+    participant Operator (Browser)
     participant Qelox Web Server (Go)
     participant Qelox Controller
-    participant Arquivamento (SSD)
+    participant Storage (SSD)
     
-    Operador (Navegador)->>Qelox Web Server (Go): POST /api/config/environment (env: colosseum)
+    Operator (Browser)->>Qelox Web Server (Go): POST /api/config/environment (env: colosseum)
     Qelox Web Server (Go)->>Qelox Controller: SIGTERM go-quai
-    Qelox Web Server (Go)->>Arquivamento (SSD): Grava config.toml adaptado (--node.environment=colosseum)
-    Qelox Web Server (Go)->>Arquivamento (SSD): Altera pasta Dir (--global.data-dir=~/.go-quai-colosseum)
+    Qelox Web Server (Go)->>Storage (SSD): Writes adapted config.toml (--node.environment=colosseum)
+    Qelox Web Server (Go)->>Storage (SSD): Changes Data Dir (--global.data-dir=~/.go-quai-colosseum)
     Qelox Web Server (Go)->>Qelox Controller: START go-quai
-    Qelox Controller-->>Operador (Navegador): ACK 200: Nó Reiniciado em Colosseum
+    Qelox Controller-->>Operator (Browser): ACK 200: Node Restarted in Colosseum
 ```
 
 ---
 
-## 5. Capturas de Tela Recomendadas (Apresentação SaaS)
+## 5. UI Presentation
 
-*Devido à limitação do texto em PDF, recomendamos injetar (pós-renderização) nas páginas finais imagens destas seções na tela viva:*
+The project provides two primary interfaces for real-time monitoring:
 
-1. **Top Dashboard Web Cards:** Apresentar a visão "Glassmorphism" com o Health Score Circular na cor verde e com os botões de controle de rede dinâmicos no Header.
-2. **Terminal TUI View (`qelox tui`):** Uma imagem do Putty ou do ZSH processando o grid Dual-Column da TUI escrita utilizando Charmbracelet BubbleTea.
+1. **Web Dashboard:** A modern "Glassmorphism" UI with a circular Health Score and dynamic network control buttons.
+2. **Terminal UI (TUI):** A dual-column terminal dashboard built with Charmbracelet Bubble Tea, perfect for remote SSH monitoring.
 
-**Autor do Sumário Tecnológico**: Agentic System.
+**Technical Summary Author**: Agentic System.

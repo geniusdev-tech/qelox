@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>QELO-X Dashboard</title>
-  <meta name="description" content="QELO-X — go-quai Node Orchestrator Dashboard. Monitor de métricas em tempo real." />
+  <meta name="description" content="QELO-X — go-quai Node Orchestrator Dashboard. Real-time metrics monitor." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -69,7 +69,7 @@
           </svg>
           <div class="health-text" id="health-score">—</div>
         </div>
-        <div class="card-sub" id="health-status">calculando...</div>
+        <div class="card-sub" id="health-status">calculating...</div>
       </div>
       <div class="card card-glow-green">
         <div class="card-label">NODE STATUS</div>
@@ -118,7 +118,7 @@
         <div class="progress-bar-track">
           <div class="progress-bar progress-disk" id="disk-bar"></div>
         </div>
-        <div class="card-sub" id="disk-detail">— usado · — livre</div>
+        <div class="card-sub" id="disk-detail">— used · — free</div>
       </div>
       <div class="card">
         <div class="card-label">NETWORK I/O</div>
@@ -160,7 +160,7 @@
     <section class="alert-section" id="freeze-alert" style="display:none">
       <div class="alert-box">
         <span class="alert-icon">⚠</span>
-        <span id="freeze-msg">FREEZE DETECTADO — node sem novos blocos</span>
+        <span id="freeze-msg">FREEZE DETECTED — node with no new blocks</span>
       </div>
     </section>
 
@@ -173,10 +173,10 @@
             <input type="checkbox" id="autoscroll" checked /> auto-scroll
           </label>
           <select id="tail-select" class="tail-select">
-            <option value="50">50 linhas</option>
-            <option value="100" selected>100 linhas</option>
-            <option value="200">200 linhas</option>
-            <option value="500">500 linhas</option>
+            <option value="50">50 lines</option>
+            <option value="100" selected>100 lines</option>
+            <option value="200">200 lines</option>
+            <option value="500">500 lines</option>
           </select>
         </div>
       </div>
@@ -187,8 +187,8 @@
 
   <!-- FOOTER -->
   <footer class="footer">
-    <span class="footer-left">QELO-X Orchestrator · <span id="footer-status">conectando…</span></span>
-    <span class="footer-right">última atualização: <span id="last-update">—</span></span>
+    <span class="footer-left">QELO-X Orchestrator · <span id="footer-status">connecting…</span></span>
+    <span class="footer-right">last update: <span id="last-update">—</span></span>
   </footer>
 
   <script src="app.js"></script>

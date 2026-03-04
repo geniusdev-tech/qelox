@@ -1,5 +1,5 @@
-// Package config — carrega e valida config.toml do QELO-X.
-// Toda configuração é tipada e validada antes de ser usada.
+// Package config — loads and validates QELO-X config.toml.
+// All configuration is typed and validated before use.
 package config
 
 import (
@@ -11,7 +11,7 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// Config agrupa toda a configuração do daemon.
+// Config groups all daemon configuration.
 type Config struct {
 	Node    NodeConfig    `toml:"node"`
 	Daemon  DaemonConfig  `toml:"daemon"`
@@ -19,7 +19,7 @@ type Config struct {
 	Web     WebConfig     `toml:"web"`
 }
 
-// NodeConfig — configuração do binário go-quai.
+// NodeConfig — go-quai binary configuration.
 type NodeConfig struct {
 	BinaryPath string   `toml:"binary_path"`
 	BaseDir    string   `toml:"base_dir"`
@@ -29,7 +29,7 @@ type NodeConfig struct {
 	ExtraArgs  []string `toml:"extra_args"`
 }
 
-// DaemonConfig — comportamento do daemon qeloxd.
+// DaemonConfig — qeloxd daemon behavior.
 type DaemonConfig struct {
 	SocketPath   string `toml:"socket_path"`
 	LockFile     string `toml:"lock_file"`
@@ -37,7 +37,7 @@ type DaemonConfig struct {
 	MaxRestarts  int    `toml:"max_restarts"`
 }
 
-// MonitorConfig — intervalos de coleta de métricas.
+// MonitorConfig — metrics collection intervals.
 type MonitorConfig struct {
 	IntervalSec      int    `toml:"interval_sec"`
 	FreezeTimeoutMin int    `toml:"freeze_timeout_min"`
@@ -45,7 +45,7 @@ type MonitorConfig struct {
 	MinPeers         int    `toml:"min_peers"`
 }
 
-// WebConfig — dashboard web embutido.
+// WebConfig — embedded web dashboard.
 type WebConfig struct {
 	Enabled  bool   `toml:"enabled"`
 	Port     int    `toml:"port"`
@@ -54,7 +54,7 @@ type WebConfig struct {
 	Password string `toml:"password"`
 }
 
-// Load procura config.toml em ~/qelox/config.toml.
+// Load searches for config.toml in ~/qelox/config.toml.
 func Load() (*Config, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -64,7 +64,7 @@ func Load() (*Config, error) {
 
 	cfg := defaults()
 	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
-		// Sem arquivo de config — usa defaults.
+		// No configuration file — use defaults.
 		return cfg, nil
 	}
 	if _, err := toml.DecodeFile(path, cfg); err != nil {
@@ -73,7 +73,7 @@ func Load() (*Config, error) {
 	return cfg, validate(cfg)
 }
 
-// Save grava a configuração atual de volta no disk.
+// Save writes current configuration back to disk.
 func Save(cfg *Config) error {
 	if err := validate(cfg); err != nil {
 		return err
@@ -125,24 +125,24 @@ func defaults() *Config {
 
 func validate(cfg *Config) error {
 	if cfg.Node.BinaryPath == "" {
-		return errors.New("node.binary_path não pode ser vazio")
+		return errors.New("node.binary_path cannot be empty")
 	}
 	if cfg.Daemon.SocketPath == "" {
-		return errors.New("daemon.socket_path não pode ser vazio")
+		return errors.New("daemon.socket_path cannot be empty")
 	}
 	if cfg.Web.Enabled && (cfg.Web.Port < 1 || cfg.Web.Port > 65535) {
-		return fmt.Errorf("web.port inválido: %d", cfg.Web.Port)
+		return fmt.Errorf("invalid web.port: %d", cfg.Web.Port)
 	}
 	return nil
 }
 
-// LogFile retorna caminho do arquivo de log do daemon.
+// LogFile returns the daemons log file path.
 func (c *Config) LogFile() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, "qelox", "logs", "qeloxd.log")
 }
 
-// NodeLogFile retorna caminho do arquivo de log do go-quai.
+// NodeLogFile returns the go-quai log file path.
 func (c *Config) NodeLogFile() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, "qelox", "logs", "go-quai.log")

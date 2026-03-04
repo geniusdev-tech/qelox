@@ -1,0 +1,32 @@
+# QELO-X Configuration File
+# Default location: ~/qelox/config.toml
+
+[node]
+binary_path = "/usr/local/bin/go-quai"
+base_dir    = ""
+data_dir    = ""
+max_peers   = 25
+auto_start  = true
+# Note: --node.environment is required for Quai Network nodes.
+extra_args  = ["--node.environment=colosseum", "--node.slices=[0 0]"]
+
+
+[daemon]
+auto_start        = true
+socket_path       = "" # Leave empty for default: ~/qelox/runtime/qelox.sock
+lock_file         = "" # Leave empty for default: ~/qelox/runtime/qeloxd.lock
+restart_delay_sec = 5
+max_restarts      = 0  # 0 = infinite restarts
+
+[monitor]
+interval_sec       = 2
+freeze_timeout_min = 10
+rpc_url            = "http://localhost:9200"
+min_peers          = 10 # Triggers Alert if PeerCount (Sockets) < min_peers
+
+[web]
+enabled = true
+port    = 9201
+bind    = "127.0.0.1"
+username = "admin"
+password = "" # Set a password to protect the dashboard

@@ -1,4 +1,4 @@
-// Package log — logger estruturado JSON com rotação por tamanho e Tail().
+// Package log — JSON structured logger with size rotation and Tail().
 package log
 
 import (
@@ -49,18 +49,18 @@ func New(logPath string) *Logger {
 
 func (l *Logger) openOrCreate() {
 	if err := os.MkdirAll(filepath.Dir(l.logPath), 0750); err != nil {
-		fmt.Fprintf(os.Stderr, "log: não foi possível criar diretório: %v\n", err)
+		fmt.Fprintf(os.Stderr, "log: could not create directory: %v\n", err)
 		l.out = os.Stderr
 		return
 	}
 	f, err := os.OpenFile(l.logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "log: não foi possível abrir arquivo: %v\n", err)
+		fmt.Fprintf(os.Stderr, "log: could not open file: %v\n", err)
 		l.out = os.Stderr
 		return
 	}
 	l.logFile = f
-	// Escreve em arquivo E stderr (visível no journalctl).
+	// Write to file AND stderr (visible in journalctl).
 	l.out = io.MultiWriter(f, os.Stderr)
 }
 
@@ -96,8 +96,8 @@ func (l *Logger) write(level Level, msg string, kvs []interface{}) {
 	l.rotateIfNeeded()
 }
 
-// rotateIfNeeded faz rotação se o arquivo ultrapassar maxLogBytes.
-// Deve ser chamado com l.mu travado.
+// rotateIfNeeded rotates if file exceeds maxLogBytes.
+// Must be called with l.mu locked.
 func (l *Logger) rotateIfNeeded() {
 	if l.logFile == nil || l.logPath == "" {
 		return
@@ -123,7 +123,7 @@ func (l *Logger) rotateIfNeeded() {
 	l.out = io.MultiWriter(f, os.Stderr)
 }
 
-// Tail retorna as últimas n linhas do arquivo de log.
+// Tail returns the last n lines of the log file.
 // Thread-safe.
 func (l *Logger) Tail(n int) []string {
 	if l.logPath == "" {

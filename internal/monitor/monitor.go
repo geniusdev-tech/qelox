@@ -1,6 +1,6 @@
-// Package monitor — coleta métricas do sistema e do node go-quai.
-// Detecta freeze quando block height para de avançar.
-// FIX: http.Client singleton, freeze detection corrigida, métricas expandidas.
+// Package monitor — collects system and go-quai node metrics.
+// Detects freeze when block height stops advancing.
+// FIX: http.Client singleton, fixed freeze detection, expanded metrics.
 package monitor
 
 import (
@@ -26,7 +26,7 @@ import (
 	"github.com/zeus/qelox/internal/node"
 )
 
-// Metrics contém todas as métricas coletadas em um instante.
+// Metrics contains all collected metrics at an instant.
 type Metrics struct {
 	Timestamp time.Time `json:"timestamp"`
 	NodeState string    `json:"node_state"`
@@ -136,7 +136,7 @@ func (m *Monitor) Start() {
 	interval := time.Duration(m.cfg.Monitor.IntervalSec) * time.Second
 	m.ticker = time.NewTicker(interval)
 	go m.loop()
-	m.log.Info("monitor iniciado", "interval", interval)
+	m.log.Info("monitor started", "interval", interval)
 }
 
 // Stop encerra o loop.
@@ -294,7 +294,7 @@ func (m *Monitor) collect() {
 			if frozen > limit {
 				metrics.Frozen = true
 				metrics.FreezeFor = frozen.Round(time.Second).String()
-				m.log.Warn("ALERTA: go-quai possivelmente travado", "sem_novo_bloco", frozen.Round(time.Second))
+				m.log.Warn("ALERT: go-quai possibly frozen", "no_new_block", frozen.Round(time.Second))
 			}
 		}
 		// Calcula blocos/min over janela de 5 amostras.

@@ -28,13 +28,13 @@ async function fetchMetrics() {
     try {
         const res = await fetch(API.metrics);
         if (res.status === 401) {
-            setFooter('requer autenticação (atualize a página)', '#f43f5e');
+            setFooter('authentication required (refresh page)', '#f43f5e');
             return;
         }
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const m = await res.json();
         renderMetrics(m);
-        setFooter('conectado', '#00ff65');
+        setFooter('connected', '#00ff65');
     } catch (e) {
         setFooter('daemon offline — ' + e.message, '#f43f5e');
         setBadge('OFFLINE', 'stopped');
@@ -52,13 +52,13 @@ function renderMetrics(m) {
     setText('node-uptime', 'uptime: ' + (m.uptime || '—'));
     setText('block-height', '#' + (m.block_height || 0).toLocaleString());
     setText('blocks-per-min', (m.blocks_per_minute > 0
-        ? m.blocks_per_minute.toFixed(2) + ' blocos/min' : 'sem novos blocos'));
+        ? m.blocks_per_minute.toFixed(2) + ' blocks/min' : 'no new blocks'));
     setText('peer-count', m.peer_count === -1 ? 'N/A' : (m.peer_count ?? '—'));
     setText('sync-status', (m.sync_status || '—').toUpperCase());
     setText('restarts', m.restarts ?? '—');
     setText('last-crash', m.last_crash_reason
-        ? 'último crash: ' + m.last_crash_reason.slice(0, 40)
-        : (m.last_restart_at ? 'reiniciado: ' + fmtTime(m.last_restart_at) : '—'));
+        ? 'last crash: ' + m.last_crash_reason.slice(0, 40)
+        : (m.last_restart_at ? 'restarted: ' + fmtTime(m.last_restart_at) : '—'));
 
     // CPU
     const cpu = m.cpu_percent || 0;
@@ -84,7 +84,7 @@ function renderMetrics(m) {
     const diskUsed = fmtBytes(m.disk_used_bytes || 0);
     const diskFree = fmtBytes(m.disk_free_bytes || 0);
     setBar('disk-bar', diskPct);
-    setText('disk-detail', `${diskUsed} usado · ${diskFree} livre`);
+    setText('disk-detail', `${diskUsed} used · ${diskFree} free`);
 
     // Network
     setText('net-recv', '↓ ' + fmtBytes(m.net_recv_bytes || 0) + '/s');
@@ -100,15 +100,15 @@ function renderMetrics(m) {
         if (hScore >= 90) {
             hPath.style.stroke = 'var(--brand)';
             if (hCard) hCard.className = 'card card-glow-green';
-            setText('health-status', 'Excelente');
+            setText('health-status', 'Excellent');
         } else if (hScore >= 70) {
             hPath.style.stroke = 'var(--amber)';
             if (hCard) hCard.className = 'card card-glow-amber';
-            setText('health-status', 'Atenção');
+            setText('health-status', 'Warning');
         } else {
             hPath.style.stroke = 'var(--red)';
             if (hCard) hCard.className = 'card card-warn';
-            setText('health-status', 'Crítico');
+            setText('health-status', 'Critical');
         }
     }
 
@@ -149,13 +149,13 @@ function renderMetrics(m) {
     const freezeEl = document.getElementById('freeze-alert');
     if (m.frozen) {
         freezeEl.style.display = '';
-        setText('freeze-msg', `FREEZE DETECTADO — sem novos blocos há ${m.freeze_for || '?'}`);
+        setText('freeze-msg', `FREEZE DETECTED — no new blocks for ${m.freeze_for || '?'}`);
     } else {
         freezeEl.style.display = 'none';
     }
 
     // Footer timestamp
-    setText('last-update', new Date().toLocaleTimeString('pt-BR'));
+    setText('last-update', new Date().toLocaleTimeString('en-US'));
 }
 
 // ── Logs ──────────────────────────────────────────────────────────────
@@ -203,7 +203,7 @@ async function sendCommand(cmd) {
         });
         const data = await res.json();
         if (data.ok || res.ok) {
-            showFeedback(`✓ ${cmd.toUpperCase()} executado`, 'ok');
+            showFeedback(`✓ ${cmd.toUpperCase()} executed`, 'ok');
         } else {
             showFeedback(`✗ ${data.error || 'erro'}`, 'err');
         }
@@ -224,13 +224,13 @@ function showFeedback(msg, cls) {
 
 // ── Environment ───────────────────────────────────────────────────────
 async function changeEnvironment(env) {
-    if (!confirm(`Mudar a rede para ${env.toUpperCase()}? O nó será pausado, o config reescrito e iniciado automaticamente.`)) {
+    if (!confirm(`Switch network to ${env.toUpperCase()}? The node will be paused, config rewritten and restarted automatically.`)) {
         setTimeout(fetchMetrics, 100);
         return;
     }
     const fb = document.getElementById('cmd-feedback');
     fb.className = 'cmd-feedback';
-    fb.textContent = 'Migrando...';
+    fb.textContent = 'Migrating...';
 
     try {
         const res = await fetch('/api/config/environment', {
@@ -240,12 +240,12 @@ async function changeEnvironment(env) {
         });
         const data = await res.json();
         if (data.ok || res.ok) {
-            showFeedback(`✓ Migrado para ${env}`, 'ok');
+            showFeedback(`✓ Migrated to ${env}`, 'ok');
         } else {
-            showFeedback(`✗ Erro: ${data.error}`, 'err');
+            showFeedback(`✗ Error: ${data.error}`, 'err');
         }
     } catch (e) {
-        showFeedback('✗ daemon indisponível', 'err');
+        showFeedback('✗ daemon unavailable', 'err');
     }
     setTimeout(fetchMetrics, 2000);
 }
@@ -295,7 +295,7 @@ function fmtBytes(b) {
 }
 
 function fmtTime(iso) {
-    try { return new Date(iso).toLocaleString('pt-BR'); } catch { return iso; }
+    try { return new Date(iso).toLocaleString('en-US'); } catch { return iso; }
 }
 
 function escHtml(str) {

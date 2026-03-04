@@ -1,5 +1,5 @@
-// Package web — HTTP dashboard embutido no qeloxd.
-// Serve uma SPA estática via embed.FS e expõe API REST para:
+// Package web — Embedded HTTP dashboard for qeloxd.
+// Serves a static SPA via embed.FS and exposes REST API for:
 //
 //	GET  /api/metrics  → snapshot de métricas
 //	GET  /api/status   → estado + uptime do node
@@ -29,7 +29,7 @@ import (
 //go:embed static
 var staticFiles embed.FS
 
-// Server é o HTTP server do dashboard.
+// Server is the dashboard HTTP server.
 type Server struct {
 	cfg    *config.Config
 	node   *node.Controller
@@ -57,7 +57,7 @@ func (s *Server) Start() error {
 	// SPA estática via embed.FS — serve index.html para qualquer rota não-API.
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
-		return fmt.Errorf("falha ao montar static fs: %w", err)
+		return fmt.Errorf("failed to mount static fs: %w", err)
 	}
 	fileServer := http.FileServer(http.FS(staticFS))
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -89,13 +89,13 @@ func (s *Server) Start() error {
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("falha ao abrir porta web %s: %w", addr, err)
+		return fmt.Errorf("failed to open web port %s: %w", addr, err)
 	}
 
 	go func() {
-		s.logger.Info("web dashboard iniciado", "addr", "http://"+addr)
+		s.logger.Info("web dashboard started", "addr", "http://"+addr)
 		if err := s.srv.Serve(ln); err != nil && err != http.ErrServerClosed {
-			s.logger.Error("web server erro", "error", err)
+			s.logger.Error("web server error", "error", err)
 		}
 	}()
 
@@ -110,14 +110,14 @@ func (s *Server) Stop() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	s.srv.Shutdown(ctx)
-	s.logger.Info("web dashboard encerrado")
+	s.logger.Info("web dashboard terminated")
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		httpError(w, "método não permitido", http.StatusMethodNotAllowed)
+		httpError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	writeJSON(w, s.mon.Snapshot())
@@ -180,7 +180,7 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 	case "restart":
 		err = s.node.Restart()
 	default:
-		httpError(w, "comando desconhecido: "+body.Command, http.StatusBadRequest)
+		httpError(w, "unknown command: "+body.Command, http.StatusBadRequest)
 		return
 	}
 
@@ -210,7 +210,7 @@ func (s *Server) handleEnvironment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.logger.Info("mudando environment para", "env", env)
+	s.logger.Info("changing environment to", "env", env)
 
 	// 1. Pausa o nó
 	s.node.Stop()
@@ -235,14 +235,14 @@ func (s *Server) handleEnvironment(w http.ResponseWriter, r *http.Request) {
 
 	// 3. Salva no disco
 	if err := config.Save(s.cfg); err != nil {
-		s.logger.Error("falha ao salvar config", "error", err)
-		httpError(w, "falha ao salvar", http.StatusInternalServerError)
+		s.logger.Error("failed to save config", "error", err)
+		httpError(w, "failed to save", http.StatusInternalServerError)
 		return
 	}
 
 	// 4. Reinicia o nó com nova config
 	if err := s.node.Start(); err != nil {
-		s.logger.Error("falha ao iniciar nova rede", "error", err)
+		s.logger.Error("failed to start new network", "error", err)
 		writeJSON(w, map[string]interface{}{"ok": false, "error": err.Error()})
 		return
 	}
@@ -286,7 +286,7 @@ func (s *Server) basicAuthMiddleware(next http.Handler) http.Handler {
 		user, pass, ok := r.BasicAuth()
 		if !ok || user != s.cfg.Web.Username || pass != s.cfg.Web.Password {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
-			http.Error(w, "Não autorizado", http.StatusUnauthorized)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r)

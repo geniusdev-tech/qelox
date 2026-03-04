@@ -1,6 +1,6 @@
-// Package node — Controller do processo go-quai.
-// Gerencia start/stop/restart, auto-restart com backoff exponencial correto,
-// sem vazamento de file descriptors e com metadata de crash exportável.
+// Package node — go-quai process Controller.
+// Manages start/stop/restart, correct exponential backoff auto-restart,
+// with no file descriptor leaks and exportable crash metadata.
 package node
 
 import (
@@ -17,7 +17,7 @@ import (
 	"github.com/zeus/qelox/internal/log"
 )
 
-// State representa o estado atual do node.
+// State represents the current node state.
 type State int
 
 const (
@@ -76,10 +76,10 @@ func (c *Controller) Start() error {
 	defer c.mu.Unlock()
 
 	if c.state == StateRunning || c.state == StateStarting {
-		return fmt.Errorf("go-quai já está rodando (state=%s)", c.state)
+		return fmt.Errorf("go-quai is already running (state=%s)", c.state)
 	}
 	if _, err := os.Stat(c.cfg.Node.BinaryPath); err != nil {
-		return fmt.Errorf("binário não encontrado: %s", c.cfg.Node.BinaryPath)
+		return fmt.Errorf("binary not found: %s", c.cfg.Node.BinaryPath)
 	}
 	c.state = StateStarting
 	return c.launch()
@@ -100,7 +100,7 @@ func (c *Controller) launch() error {
 	}
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
 	if err != nil {
-		return fmt.Errorf("falha ao abrir log do node: %w", err)
+		return fmt.Errorf("failed to open node log: %w", err)
 	}
 	// FIX: fechar o logFile anterior se existir (evita FD leak em restarts).
 	if c.logFile != nil {
@@ -117,13 +117,13 @@ func (c *Controller) launch() error {
 		c.state = StateCrashed
 		logFile.Close()
 		c.logFile = nil
-		return fmt.Errorf("falha ao iniciar go-quai: %w", err)
+		return fmt.Errorf("failed to start go-quai: %w", err)
 	}
 
 	c.cmd = cmd
 	c.state = StateRunning
 	c.startAt = time.Now()
-	c.log.Info("go-quai iniciado", "pid", cmd.Process.Pid, "args", args)
+	c.log.Info("go-quai started", "pid", cmd.Process.Pid, "args", args)
 
 	go c.watchProcess()
 	return nil
@@ -138,22 +138,22 @@ func (c *Controller) watchProcess() {
 
 	if c.state == StateStopping {
 		c.state = StateStopped
-		c.log.Info("go-quai parou normalmente")
+		c.log.Info("go-quai stopped normally")
 		return
 	}
 
 	// Registrar motivo do crash.
-	crashReason := "exit limpo"
+	crashReason := "clean exit"
 	if err != nil {
 		crashReason = err.Error()
 	}
 	c.lastCrashReason = crashReason
 	c.state = StateCrashed
 	c.restarts++
-	c.log.Warn("go-quai crashou", "error", crashReason, "restarts", c.restarts)
+	c.log.Warn("go-quai crashed", "error", crashReason, "restarts", c.restarts)
 
 	if c.cfg.Daemon.MaxRestarts > 0 && c.restarts >= c.cfg.Daemon.MaxRestarts {
-		c.log.Error("limite de restarts atingido")
+		c.log.Error("restart limit reached")
 		c.state = StateStopped
 		return
 	}
@@ -164,7 +164,7 @@ func (c *Controller) watchProcess() {
 	if delay > 60*time.Second {
 		delay = 60 * time.Second
 	}
-	c.log.Info("agendando restart", "delay", delay)
+	c.log.Info("scheduling restart", "delay", delay)
 
 	go func() {
 		timer := time.NewTimer(delay)
@@ -175,16 +175,16 @@ func (c *Controller) watchProcess() {
 			defer c.mu.Unlock()
 			// Check if we're still in crashed state (prevent race where user triggered Start)
 			if c.state != StateCrashed {
-				c.log.Info("estado mudou, cancelando auto-restart")
+				c.log.Info("state changed, canceling auto-restart")
 				return
 			}
 			c.lastRestartAt = time.Now()
-			c.log.Info("reiniciando go-quai após crash")
+			c.log.Info("restarting go-quai after crash")
 			if err := c.launch(); err != nil {
-				c.log.Error("falha no auto-restart", "error", err)
+				c.log.Error("auto-restart failed", "error", err)
 			}
 		case <-c.stopRestart:
-			c.log.Info("auto-restart cancelado")
+			c.log.Info("auto-restart canceled")
 		}
 	}()
 }
@@ -195,7 +195,7 @@ func (c *Controller) Stop() error {
 
 	if c.state != StateRunning && c.state != StateCrashed {
 		c.mu.Unlock()
-		return fmt.Errorf("node não está rodando (state=%s)", c.state)
+		return fmt.Errorf("node is not running (state=%s)", c.state)
 	}
 	wasRunning := (c.state == StateRunning)
 	c.state = StateStopping
@@ -208,7 +208,7 @@ func (c *Controller) Stop() error {
 
 	if wasRunning {
 		proc := c.cmd.Process
-		c.log.Info("enviando SIGTERM", "pid", proc.Pid)
+		c.log.Info("sending SIGTERM", "pid", proc.Pid)
 		if err := proc.Signal(syscall.SIGTERM); err != nil {
 			c.mu.Unlock()
 			return err
@@ -225,7 +225,7 @@ func (c *Controller) Stop() error {
 			case <-timeout:
 				c.mu.Lock()
 				if c.state != StateStopped {
-					c.log.Warn("timeout — enviando SIGKILL")
+					c.log.Warn("timeout — sending SIGKILL")
 					proc.Kill()
 					c.state = StateStopped
 				}
@@ -336,7 +336,7 @@ func KillOrphans(logger *log.Logger) {
 			var pid int
 			fmt.Sscan(e.Name(), &pid)
 			if pid > 0 {
-				logger.Warn("matando processo orphan go-quai", "pid", pid)
+				logger.Warn("killing orphan go-quai process", "pid", pid)
 				syscall.Kill(pid, syscall.SIGKILL)
 			}
 		}

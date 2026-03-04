@@ -1,4 +1,4 @@
-// Package socket — servidor UNIX domain socket do qeloxd.
+// Package socket — qeloxd UNIX domain socket server.
 // FIX: permissão do socket alterada de 0666 para 0660.
 package socket
 
@@ -59,7 +59,7 @@ func (s *Server) Start() error {
 	}
 
 	s.listener = ln
-	s.log.Info("socket UNIX aberto", "path", s.cfg.Daemon.SocketPath, "perm", "0660")
+	s.log.Info("UNIX socket opened", "path", s.cfg.Daemon.SocketPath, "perm", "0660")
 	go s.acceptLoop()
 	return nil
 }
@@ -80,7 +80,7 @@ func (s *Server) acceptLoop() {
 			case <-s.quit:
 				return
 			default:
-				s.log.Error("erro ao aceitar conexão", "error", err)
+				s.log.Error("error accepting connection", "error", err)
 				continue
 			}
 		}
@@ -96,7 +96,7 @@ func (s *Server) handleConn(conn net.Conn) {
 	if err := json.NewDecoder(limitReader).Decode(&req); err != nil {
 
 		if err != io.EOF {
-			s.log.Error("erro ao decodificar request", "error", err)
+			s.log.Error("error decoding request", "error", err)
 		}
 		return
 	}
@@ -109,17 +109,17 @@ func (s *Server) dispatch(cmd string) Response {
 		if err := s.node.Start(); err != nil {
 			return Response{Error: err.Error()}
 		}
-		return Response{OK: true, Payload: "go-quai iniciado"}
+		return Response{OK: true, Payload: "go-quai started"}
 	case "stop":
 		if err := s.node.Stop(); err != nil {
 			return Response{Error: err.Error()}
 		}
-		return Response{OK: true, Payload: "go-quai parado"}
+		return Response{OK: true, Payload: "go-quai stopped"}
 	case "restart":
 		if err := s.node.Restart(); err != nil {
 			return Response{Error: err.Error()}
 		}
-		return Response{OK: true, Payload: "go-quai reiniciado"}
+		return Response{OK: true, Payload: "go-quai restarted"}
 	case "status":
 		return Response{OK: true, Payload: map[string]interface{}{
 			"state":    s.node.State().String(),
@@ -131,7 +131,7 @@ func (s *Server) dispatch(cmd string) Response {
 	case "version":
 		return Response{OK: true, Payload: "qeloxd v1.1.0"}
 	default:
-		return Response{Error: "comando desconhecido: " + cmd}
+		return Response{Error: "unknown command: " + cmd}
 	}
 }
 
