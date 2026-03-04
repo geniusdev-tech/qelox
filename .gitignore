@@ -3,8 +3,11 @@ bin/
 qelox
 qeloxd
 
-# Logs
-logs/
+# Documentação e Relatórios
+*.pdf
+report*.html
+diag*.mmd
+s/
 nodelogs/
 *.log
 
