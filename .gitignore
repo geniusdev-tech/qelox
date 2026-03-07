@@ -2,6 +2,7 @@
 bin/
 qelox
 qeloxd
+main
 *.exe
 *.test
 *.prof
@@ -31,6 +32,7 @@ diag*.mmd
 .DS_Store
 *.swp
 *~
+*.bak
 
 # Go Environment
 vendor/

@@ -113,6 +113,12 @@ func (c *Controller) launch() error {
 	// Process group próprio para facilitar kill de toda a árvore.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
+	// Injetar variáveis de mitigação de memória
+	cmd.Env = append(os.Environ(),
+		"GOGC=50",
+		"GOMEMLIMIT=1GiB",
+	)
+
 	if err := cmd.Start(); err != nil {
 		c.state = StateCrashed
 		logFile.Close()

@@ -1,10 +1,5 @@
 // Package web — Embedded HTTP dashboard for qeloxd.
-// Serves a static SPA via embed.FS and exposes REST API for:
-//
-//	GET  /api/metrics  → snapshot de métricas
-//	GET  /api/status   → estado + uptime do node
-//	GET  /api/logs     → últimas N linhas de log (?tail=N, default 100)
-//	POST /api/command  → start | stop | restart
+// Serves a static SPA via embed.FS and exposes REST API.
 package web
 
 import (
@@ -13,14 +8,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	stdlog "log"
 	"net"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/zeus/qelox/internal/config"
+	"github.com/zeus/qelox/internal/explorer"
 	"github.com/zeus/qelox/internal/log"
 	"github.com/zeus/qelox/internal/monitor"
 	"github.com/zeus/qelox/internal/node"
@@ -31,16 +27,17 @@ var staticFiles embed.FS
 
 // Server is the dashboard HTTP server.
 type Server struct {
-	cfg    *config.Config
-	node   *node.Controller
-	mon    *monitor.Monitor
-	logger *log.Logger
-	srv    *http.Server
+	cfg      *config.Config
+	node     *node.Controller
+	mon      *monitor.Monitor
+	logger   *log.Logger
+	explorer *explorer.Explorer
+	srv      *http.Server
 }
 
 // New cria um Server.
 func New(cfg *config.Config, nc *node.Controller, mon *monitor.Monitor, logger *log.Logger) *Server {
-	return &Server{cfg: cfg, node: nc, mon: mon, logger: logger}
+	return &Server{cfg: cfg, node: nc, mon: mon, logger: logger, explorer: explorer.New(cfg, nc)}
 }
 
 // Start inicia o HTTP server em goroutine.
@@ -49,19 +46,27 @@ func (s *Server) Start() error {
 
 	// API endpoints.
 	mux.HandleFunc("/api/stats", s.handleMetrics)
+	mux.HandleFunc("/api/metrics", s.handleMetrics)
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/logs", s.handleLogs)
 	mux.HandleFunc("/api/config/environment", s.handleEnvironment)
 	mux.HandleFunc("/api/health", s.handleHealth)
+	mux.HandleFunc("/api/command", s.handleCommand)
+	mux.HandleFunc("/api/config", s.handleSaveConfig)
 
-	// SPA estática via embed.FS — serve index.html para qualquer rota não-API.
+	// Explorer endpoints
+	mux.HandleFunc("/api/explorer/search", s.handleExplorerSearch)
+	mux.HandleFunc("/api/explorer/block", s.handleExplorerBlock)
+	mux.HandleFunc("/api/explorer/tx", s.handleExplorerTx)
+	mux.HandleFunc("/api/explorer/address", s.handleExplorerAddress)
+
+	// SPA estática via embed.FS
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
 		return fmt.Errorf("failed to mount static fs: %w", err)
 	}
 	fileServer := http.FileServer(http.FS(staticFS))
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Se o arquivo não existe, serve index.html (SPA fallback).
 		if r.URL.Path != "/" {
 			f, err := staticFS.Open(strings.TrimPrefix(r.URL.Path, "/"))
 			if err != nil {
@@ -73,23 +78,24 @@ func (s *Server) Start() error {
 		fileServer.ServeHTTP(w, r)
 	}))
 
-	handler := corsMiddleware(mux)
+	// Wrap handler with diagnostics
+	handler := requestLogger(http.Handler(mux))
 	if s.cfg.Web.Username != "" && s.cfg.Web.Password != "" {
 		handler = s.basicAuthMiddleware(handler)
 	}
+	handler = corsMiddleware(handler)
 
 	addr := fmt.Sprintf("%s:%d", s.cfg.Web.Bind, s.cfg.Web.Port)
 	s.srv = &http.Server{
 		Addr:         addr,
 		Handler:      handler,
-		ReadTimeout:  10 * time.Second,
+		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
 	}
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("failed to open web port %s: %w", addr, err)
+		return err
 	}
 
 	go func() {
@@ -102,7 +108,7 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// Stop encerra o HTTP server com graceful shutdown.
+// Stop encerra o HTTP server.
 func (s *Server) Stop() {
 	if s.srv == nil {
 		return
@@ -113,165 +119,28 @@ func (s *Server) Stop() {
 	s.logger.Info("web dashboard terminated")
 }
 
-// ── Handlers ─────────────────────────────────────────────────────────────────
-
-func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		httpError(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	writeJSON(w, s.mon.Snapshot())
-}
-
-func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		httpError(w, "método não permitido", http.StatusMethodNotAllowed)
-		return
-	}
-	writeJSON(w, map[string]interface{}{
-		"state":    s.node.State().String(),
-		"uptime":   s.node.Uptime().Round(time.Second).String(),
-		"restarts": s.node.Restarts(),
+// requestLogger loga todas as requisições para o terminal para debug
+func requestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		stdlog.Printf("WEB: %s %s from %s (Origin: %s)", r.Method, r.URL.Path, r.RemoteAddr, r.Header.Get("Origin"))
+		next.ServeHTTP(w, r)
 	})
 }
 
-func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		httpError(w, "método não permitido", http.StatusMethodNotAllowed)
-		return
-	}
-	tailN := 100
-	if q := r.URL.Query().Get("tail"); q != "" {
-		if n, err := strconv.Atoi(q); err == nil && n > 0 && n <= 5000 {
-			tailN = n
-		}
-	}
-	lines := s.logger.Tail(tailN)
-	writeJSON(w, map[string]interface{}{"lines": lines, "count": len(lines)})
-}
-
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		httpError(w, "método não permitido", http.StatusMethodNotAllowed)
-		return
-	}
-	writeJSON(w, map[string]interface{}{"status": "ok"})
-}
-
-func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		httpError(w, "método não permitido", http.StatusMethodNotAllowed)
-		return
-	}
-	var body struct {
-		Command string `json:"command"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		httpError(w, "body inválido", http.StatusBadRequest)
-		return
-	}
-
-	var err error
-	switch strings.ToLower(strings.TrimSpace(body.Command)) {
-	case "start":
-		err = s.node.Start()
-	case "stop":
-		err = s.node.Stop()
-	case "restart":
-		err = s.node.Restart()
-	default:
-		httpError(w, "unknown command: "+body.Command, http.StatusBadRequest)
-		return
-	}
-
-	if err != nil {
-		writeJSON(w, map[string]interface{}{"ok": false, "error": err.Error()})
-		return
-	}
-	writeJSON(w, map[string]interface{}{"ok": true})
-}
-
-func (s *Server) handleEnvironment(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		httpError(w, "método não permitido", http.StatusMethodNotAllowed)
-		return
-	}
-	var body struct {
-		Environment string `json:"environment"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		httpError(w, "body inválido", http.StatusBadRequest)
-		return
-	}
-
-	env := strings.ToLower(strings.TrimSpace(body.Environment))
-	if env == "" {
-		httpError(w, "environment cannot be empty", http.StatusBadRequest)
-		return
-	}
-
-	s.logger.Info("changing environment to", "env", env)
-
-	// 1. Pausa o nó
-	s.node.Stop()
-	time.Sleep(1 * time.Second) // Dá tempo para o processo morrer com calma
-
-	// 2. Atualiza config em memória
-	home, _ := os.UserHomeDir()
-
-	// Ajusta data-dir baseado no environment
-	s.cfg.Node.DataDir = fmt.Sprintf("%s/.go-quai-%s", home, env)
-
-	foundEnv := false
-	for i, arg := range s.cfg.Node.ExtraArgs {
-		if strings.HasPrefix(arg, "--node.environment=") {
-			s.cfg.Node.ExtraArgs[i] = "--node.environment=" + env
-			foundEnv = true
-		}
-	}
-	if !foundEnv {
-		s.cfg.Node.ExtraArgs = append(s.cfg.Node.ExtraArgs, "--node.environment="+env)
-	}
-
-	// 3. Salva no disco
-	if err := config.Save(s.cfg); err != nil {
-		s.logger.Error("failed to save config", "error", err)
-		httpError(w, "failed to save", http.StatusInternalServerError)
-		return
-	}
-
-	// 4. Reinicia o nó com nova config
-	if err := s.node.Start(); err != nil {
-		s.logger.Error("failed to start new network", "error", err)
-		writeJSON(w, map[string]interface{}{"ok": false, "error": err.Error()})
-		return
-	}
-
-	writeJSON(w, map[string]interface{}{"ok": true})
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-func writeJSON(w http.ResponseWriter, v interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(v)
-}
-
-func httpError(w http.ResponseWriter, msg string, code int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]string{"error": msg})
-}
-
-// corsMiddleware adiciona headers CORS básicos.
+// corsMiddleware adiciona headers CORS permitindo acesso local e do tauri
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" && (strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:")) {
+		if origin != "" && (strings.Contains(origin, "localhost") || strings.Contains(origin, "127.0.0.1") || strings.HasPrefix(origin, "tauri://")) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
+		} else if origin == "" {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -283,6 +152,10 @@ func corsMiddleware(next http.Handler) http.Handler {
 // basicAuthMiddleware exige usuário e senha definidos no config.toml
 func (s *Server) basicAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
 		user, pass, ok := r.BasicAuth()
 		if !ok || user != s.cfg.Web.Username || pass != s.cfg.Web.Password {
 			w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
@@ -291,4 +164,180 @@ func (s *Server) basicAuthMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// ── Handlers ─────────────────────────────────────────────────────────────────
+
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.mon.Snapshot())
+}
+
+func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]interface{}{
+		"status": s.node.State(),
+		"uptime": s.node.Uptime().String(),
+	})
+}
+
+func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
+	lines := 100
+	if tail := r.URL.Query().Get("tail"); tail != "" {
+		if l, err := strconv.Atoi(tail); err == nil {
+			lines = l
+		}
+	}
+	writeJSON(w, map[string]interface{}{
+		"lines": s.logger.Tail(lines),
+	})
+}
+
+func (s *Server) handleEnvironment(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		httpError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, map[string]interface{}{
+		"environment": s.cfg.Node.ExtraArgs,
+		"config":      s.cfg,
+	})
+}
+
+func (s *Server) handleSaveConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		httpError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var newCfg config.Config
+	if err := json.NewDecoder(r.Body).Decode(&newCfg); err != nil {
+		httpError(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// Persiste no arquivo.
+	if err := config.Save(&newCfg); err != nil {
+		httpError(w, "failed to save config: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Atualiza em memória (atencao: isso não reinicia componentes automaticamente)
+	*s.cfg = newCfg
+	s.logger.Info("configuration updated and persisted")
+
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
+}
+
+func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		httpError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var cmd struct {
+		Action string `json:"action"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		httpError(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	s.logger.Info("received remote command", "action", cmd.Action)
+
+	var err error
+	switch cmd.Action {
+	case "start":
+		err = s.node.Start()
+	case "stop":
+		err = s.node.Stop()
+	case "restart":
+		err = s.node.Restart()
+	default:
+		httpError(w, "unknown action", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		httpError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleExplorerSearch(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		httpError(w, "query required", http.StatusBadRequest)
+		return
+	}
+	typ, res, err := s.explorer.Search(query)
+	if err != nil {
+		httpError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	writeJSON(w, map[string]interface{}{"type": typ, "data": res})
+}
+
+func (s *Server) handleExplorerBlock(w http.ResponseWriter, r *http.Request) {
+	hash := r.URL.Query().Get("hash")
+	num := r.URL.Query().Get("number")
+	var res interface{}
+	var err error
+	if hash != "" {
+		res, err = s.explorer.GetBlockByHash(hash)
+	} else if num != "" {
+		res, err = s.explorer.GetBlockByNumber(num)
+	} else {
+		httpError(w, "hash or number required", http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		httpError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, res)
+}
+
+func (s *Server) handleExplorerTx(w http.ResponseWriter, r *http.Request) {
+	hash := r.URL.Query().Get("hash")
+	if hash == "" {
+		httpError(w, "hash required", http.StatusBadRequest)
+		return
+	}
+	res, err := s.explorer.GetTransaction(hash)
+	if err != nil {
+		httpError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, res)
+}
+
+func (s *Server) handleExplorerAddress(w http.ResponseWriter, r *http.Request) {
+	addr := r.URL.Query().Get("address")
+	if addr == "" {
+		httpError(w, "address required", http.StatusBadRequest)
+		return
+	}
+	res, err := s.explorer.GetAddressInfo(addr)
+	if err != nil {
+		httpError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, res)
+}
+
+func writeJSON(w http.ResponseWriter, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(data)
+}
+
+func httpError(w http.ResponseWriter, msg string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }

@@ -121,10 +121,12 @@ func (s *Server) dispatch(cmd string) Response {
 		}
 		return Response{OK: true, Payload: "go-quai restarted"}
 	case "status":
+		snap := s.mon.Snapshot()
 		return Response{OK: true, Payload: map[string]interface{}{
-			"state":    s.node.State().String(),
-			"uptime":   s.node.Uptime().String(),
-			"restarts": s.node.Restarts(),
+			"state":        s.node.State().String(),
+			"uptime":       s.node.Uptime().String(),
+			"restarts":     s.node.Restarts(),
+			"block_height": snap.BlockHeight,
 		}}
 	case "metrics":
 		return Response{OK: true, Payload: s.mon.Snapshot()}

@@ -129,6 +129,9 @@ func (l *Logger) Tail(n int) []string {
 	if l.logPath == "" {
 		return nil
 	}
+
+	// We only lock to get a copy of the path.
+	// We read the file WITHOUT holding the lock to prevent blocking writes (deadlock with rotate).
 	l.mu.Lock()
 	path := l.logPath
 	l.mu.Unlock()
@@ -139,13 +142,38 @@ func (l *Logger) Tail(n int) []string {
 	}
 	defer f.Close()
 
-	var lines []string
+	// Optimized reading: Read the whole file is too slow for large logs (causes timeout).
+	// We read line by line but keep only a ring buffer of capacity 'n' in memory.
+	ring := make([]string, n)
+	count := 0
 	scanner := bufio.NewScanner(f)
+
+	// Increase scanner buffer capacity for long JSON lines
+	buf := make([]byte, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+
 	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
+		ring[count%n] = scanner.Text()
+		count++
 	}
-	if len(lines) <= n {
-		return lines
+
+	if count == 0 {
+		return nil
 	}
-	return lines[len(lines)-n:]
+
+	// Extract the actual ordered lines from the ring buffer
+	var lines []string
+	if count < n {
+		lines = make([]string, count)
+		for i := 0; i < count; i++ {
+			lines[i] = ring[i]
+		}
+	} else {
+		lines = make([]string, n)
+		for i := 0; i < n; i++ {
+			lines[i] = ring[(count+i)%n]
+		}
+	}
+
+	return lines
 }

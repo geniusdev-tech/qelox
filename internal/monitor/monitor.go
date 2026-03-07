@@ -294,7 +294,7 @@ func (m *Monitor) collect() {
 			if frozen > limit {
 				metrics.Frozen = true
 				metrics.FreezeFor = frozen.Round(time.Second).String()
-				m.log.Warn("ALERT: go-quai possibly frozen", "no_new_block", frozen.Round(time.Second))
+				m.log.Warn("ALERT: go-quai possibly frozen", "no_new_block", frozen.Round(time.Second).String())
 			}
 		}
 		// Calcula blocos/min over janela de 5 amostras.
