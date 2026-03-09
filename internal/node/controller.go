@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -315,6 +314,16 @@ func (c *Controller) LastCrashReason() string {
 	return c.lastCrashReason
 }
 
+// PID returns the managed go-quai PID when the process is live.
+func (c *Controller) PID() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.cmd == nil || c.cmd.Process == nil || c.state != StateRunning {
+		return 0
+	}
+	return c.cmd.Process.Pid
+}
+
 func (c *Controller) buildArgs() []string {
 	args := []string{"start"}
 	if c.cfg.Node.MaxPeers > 0 {
@@ -324,27 +333,4 @@ func (c *Controller) buildArgs() []string {
 		args = append(args, fmt.Sprintf("--global.data-dir=%s", c.cfg.Node.DataDir))
 	}
 	return append(args, c.cfg.Node.ExtraArgs...)
-}
-
-// KillOrphans mata processos go-quai que ficaram órfãos.
-func KillOrphans(logger *log.Logger) {
-	entries, _ := os.ReadDir("/proc")
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		commPath := filepath.Join("/proc", e.Name(), "comm")
-		data, err := os.ReadFile(commPath)
-		if err != nil {
-			continue
-		}
-		if strings.TrimSpace(string(data)) == "go-quai" {
-			var pid int
-			fmt.Sscan(e.Name(), &pid)
-			if pid > 0 {
-				logger.Warn("killing orphan go-quai process", "pid", pid)
-				syscall.Kill(pid, syscall.SIGKILL)
-			}
-		}
-	}
 }

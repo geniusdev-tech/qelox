@@ -1,0 +1,17 @@
+---
+config:
+  theme: neo-dark
+id: fc240bd6-8cae-4fca-9b38-e3bba7e13188
+---
+sequenceDiagram
+    participant OperatorBrowser as Operator (Browser)
+    participant QeloxWebServer as Qelox Web Server (Go)
+    participant QeloxController as Qelox Controller
+    participant StorageSSD as Storage (SSD)
+    
+    OperatorBrowser->>QeloxWebServer: POST /api/config/environment (env: colosseum)
+    QeloxWebServer->>QeloxController: SIGTERM go-quai
+    QeloxWebServer->>StorageSSD: Writes adapted config.toml (--node.environment=colosseum)
+    QeloxWebServer->>StorageSSD: Changes Data Dir (--global.data-dir=~/.go-quai-colosseum)
+    QeloxWebServer->>QeloxController: START go-quai
+    QeloxController-->>OperatorBrowser: ACK 200: Node Restarted in Colosseum

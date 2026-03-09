@@ -55,9 +55,6 @@ func (d *Daemon) Run() error {
 	}
 	defer d.releaseLock()
 
-	// Limpa processos go-quai órfãos.
-	node.KillOrphans(d.log)
-
 	// Inicia socket server.
 	if err := d.server.Start(); err != nil {
 		return fmt.Errorf("failed to start socket: %w", err)

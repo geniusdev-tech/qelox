@@ -1,6 +1,6 @@
 use serde::Serialize;
 use std::fs;
-
+use std::path::PathBuf;
 
 #[derive(Serialize)]
 pub struct SetupResponse {
@@ -10,15 +10,15 @@ pub struct SetupResponse {
 
 #[tauri::command]
 pub fn setup_first_run() -> Result<SetupResponse, String> {
-    let mut config_dir = dirs::config_dir().ok_or("Could not find config directory")?;
-    config_dir.push("qelox");
+    let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
+    let config_dir = PathBuf::from(&home_dir).join("qelox");
+    let config_path = config_dir.join("config.toml");
 
-    let is_first_run = !config_dir.exists();
+    let is_first_run = !config_path.exists();
 
     if is_first_run {
-        fs::create_dir_all(&config_dir).map_err(|e| format!("Failed to create config dir: {}", e))?;
-        // In a real scenario, we might want to copy a default config.toml here.
-        // For now, we just ensure the directory exists.
+        fs::create_dir_all(&config_dir)
+            .map_err(|e| format!("Failed to create config dir: {}", e))?;
     }
 
     Ok(SetupResponse {

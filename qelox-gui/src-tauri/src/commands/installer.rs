@@ -1,7 +1,7 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use tauri::{Window, Emitter};
+use tauri::{Emitter, Window};
 
 #[derive(Serialize, Clone)]
 pub struct InstallProgress {
@@ -33,7 +33,15 @@ pub async fn install_node(window: Window, target_dir: String) -> Result<String, 
         .build()
         .map_err(|e| e.to_string())?;
 
-    window.emit("install-progress", InstallProgress { percentage: 5, status: "Fetching latest release...".into() }).unwrap();
+    window
+        .emit(
+            "install-progress",
+            InstallProgress {
+                percentage: 5,
+                status: "Fetching latest release...".into(),
+            },
+        )
+        .unwrap();
 
     let release: GitHubRelease = client
         .get("https://api.github.com/repos/dominant-strategies/go-quai/releases/latest")
@@ -53,24 +61,42 @@ pub async fn install_node(window: Window, target_dir: String) -> Result<String, 
         _ => return Err("Unsupported platform".into()),
     };
 
-    let asset = release.assets.iter()
+    let asset = release
+        .assets
+        .iter()
         .find(|a| a.name.contains(os) && a.name.contains(arch))
         .ok_or_else(|| format!("No asset found for {}/{}", os, arch))?;
 
-    window.emit("install-progress", InstallProgress { percentage: 10, status: format!("Downloading {}...", asset.name) }).unwrap();
+    window
+        .emit(
+            "install-progress",
+            InstallProgress {
+                percentage: 10,
+                status: format!("Downloading {}...", asset.name),
+            },
+        )
+        .unwrap();
 
     // 3. Download
-    let response = client.get(&asset.browser_download_url).send().await.map_err(|e| e.to_string())?;
+    let response = client
+        .get(&asset.browser_download_url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
 
     let total_size = response.content_length().unwrap_or(0);
-    
+
     let mut dest_path = PathBuf::from(&target_dir);
     fs::create_dir_all(&dest_path).map_err(|e| e.to_string())?;
-    dest_path.push(if os == "windows" { "go-quai.exe" } else { "go-quai" });
+    dest_path.push(if os == "windows" {
+        "go-quai.exe"
+    } else {
+        "go-quai"
+    });
 
     let mut out = fs::File::create(&dest_path).map_err(|e| e.to_string())?;
     let mut downloaded: u64 = 0;
-    
+
     use futures_util::StreamExt;
     let mut stream = response.bytes_stream();
 
@@ -81,7 +107,15 @@ pub async fn install_node(window: Window, target_dir: String) -> Result<String, 
 
         if total_size > 0 {
             let percentage = (downloaded as f64 / total_size as f64 * 80.0) as u8 + 10;
-            window.emit("install-progress", InstallProgress { percentage, status: "Downloading...".into() }).unwrap();
+            window
+                .emit(
+                    "install-progress",
+                    InstallProgress {
+                        percentage,
+                        status: "Downloading...".into(),
+                    },
+                )
+                .unwrap();
         }
     }
 
@@ -89,12 +123,22 @@ pub async fn install_node(window: Window, target_dir: String) -> Result<String, 
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = fs::metadata(&dest_path).map_err(|e| e.to_string())?.permissions();
+        let mut perms = fs::metadata(&dest_path)
+            .map_err(|e| e.to_string())?
+            .permissions();
         perms.set_mode(0o755);
         fs::set_permissions(&dest_path, perms).map_err(|e| e.to_string())?;
     }
 
-    window.emit("install-progress", InstallProgress { percentage: 100, status: "Installation complete!".into() }).unwrap();
+    window
+        .emit(
+            "install-progress",
+            InstallProgress {
+                percentage: 100,
+                status: "Installation complete!".into(),
+            },
+        )
+        .unwrap();
 
     Ok(dest_path.to_string_lossy().into_owned())
 }

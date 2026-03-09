@@ -6,6 +6,7 @@ let _logSeq = 0;
 // Connectivity fix: robustly detect if we are NOT being served directly by the Go backend.
 // In prod web mode, the Go server serves us on port 9201. If we are on ANY other port (Vite 1420, Tauri, etc.), we use absolute URL.
 const API_BASE: string = window.location.port === '9201' ? '' : 'http://127.0.0.1:9201';
+const isTauriRuntime = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 interface MetricData {
     time: string;
@@ -80,6 +81,7 @@ interface OrchestratorStore {
     update: {
         available: boolean;
         version: string | null;
+        dismissed: boolean;
     };
 
     // Actions
@@ -106,6 +108,20 @@ const createEmptyHistory = () => {
         time: '',
         value: 0,
     }));
+};
+
+const sendCommand = async (action: 'start' | 'stop' | 'restart') => {
+    const res = await fetch(`${API_BASE}/api/command`, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+    });
+
+    const payload = await res.json().catch(() => null);
+    if (!res.ok || payload?.error) {
+        throw new Error(payload?.error || `Command failed with HTTP ${res.status}`);
+    }
 };
 
 export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
@@ -156,6 +172,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
     update: {
         available: false,
         version: null,
+        dismissed: false,
     },
 
     toggleViewMode: () => set((state) => ({
@@ -166,8 +183,8 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
 
     startNode: async () => {
         try {
-            await fetch(`${API_BASE}/api/node/start`, { method: 'POST', mode: 'cors' });
-            get().fetchMetrics();
+            await sendCommand('start');
+            await get().fetchMetrics();
         } catch (err) {
             console.error('Failed to start node:', err);
         }
@@ -175,8 +192,8 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
 
     stopNode: async () => {
         try {
-            await fetch(`${API_BASE}/api/node/stop`, { method: 'POST', mode: 'cors' });
-            get().fetchMetrics();
+            await sendCommand('stop');
+            await get().fetchMetrics();
         } catch (err) {
             console.error('Failed to stop node:', err);
         }
@@ -184,14 +201,15 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
 
     restartNode: async () => {
         try {
-            await fetch(`${API_BASE}/api/node/restart`, { method: 'POST', mode: 'cors' });
-            get().fetchMetrics();
+            await sendCommand('restart');
+            await get().fetchMetrics();
         } catch (err) {
             console.error('Failed to restart node:', err);
         }
     },
 
     checkInstall: async () => {
+        if (!isTauriRuntime()) return;
         try {
             // We use the configured path, or default
             const cfg = get().currentConfig;
@@ -205,6 +223,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
     },
 
     detectHardware: async () => {
+        if (!isTauriRuntime()) return;
         try {
             const { invoke } = await import('@tauri-apps/api/core');
             const hardware = await invoke('detect_hardware') as any;
@@ -215,6 +234,10 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
     },
 
     runInstall: async () => {
+        if (!isTauriRuntime()) {
+            set((state) => ({ installer: { ...state.installer, installing: false, status: 'Error: installer is only available in the desktop app' } }));
+            return;
+        }
         try {
             const { invoke } = await import('@tauri-apps/api/core');
             const { listen } = await import('@tauri-apps/api/event');
@@ -354,7 +377,7 @@ export const useOrchestratorStore = create<OrchestratorStore>((set, get) => ({
             const res = await fetch(`${API_BASE}/api/config/environment`, { mode: 'cors' });
             if (!res.ok) throw new Error('Failed to fetch config');
             const data = await res.json();
-            set({ currentConfig: data.config });
+            set({ currentConfig: data.config ?? null });
         } catch (err) {
             console.error('Error fetching config:', err);
         }

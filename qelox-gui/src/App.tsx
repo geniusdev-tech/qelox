@@ -23,6 +23,7 @@ const ACCENT_CYAN = '#00d9ff';
 
 const ACCENT_NEON = '#00ff88';
 const ACCENT_YELLOW = '#ffc857';
+const isTauriRuntime = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 // Page titles config
 const PAGE_META: Record<string, { title: string; subtitle: string; tag: string }> = {
@@ -81,6 +82,7 @@ export default function App() {
     // Setup / First run logic
     useEffect(() => {
         const init = async () => {
+            if (!isTauriRuntime()) return;
             try {
                 const res = await invoke('setup_first_run') as any;
                 if (res.is_first_run) setActiveTab('setup');

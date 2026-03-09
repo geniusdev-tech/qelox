@@ -192,14 +192,47 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleEnvironment(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, map[string]interface{}{
+			"environment": s.cfg.Node.ExtraArgs,
+			"config":      s.cfg,
+		})
+	case http.MethodPost:
+		var req struct {
+			Environment string `json:"environment"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			httpError(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		req.Environment = strings.TrimSpace(req.Environment)
+		if req.Environment == "" {
+			httpError(w, "environment cannot be empty", http.StatusBadRequest)
+			return
+		}
+
+		s.cfg.Node.ExtraArgs = replaceOrAppendArg(s.cfg.Node.ExtraArgs, "--node.environment=", "--node.environment="+req.Environment)
+		if err := config.Save(s.cfg); err != nil {
+			httpError(w, "failed to save config: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if s.node.IsRunning() {
+			if err := s.node.Restart(); err != nil {
+				httpError(w, "config saved, but restart failed: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		writeJSON(w, map[string]interface{}{
+			"ok":          true,
+			"environment": req.Environment,
+		})
+	default:
 		httpError(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	writeJSON(w, map[string]interface{}{
-		"environment": s.cfg.Node.ExtraArgs,
-		"config":      s.cfg,
-	})
 }
 
 func (s *Server) handleSaveConfig(w http.ResponseWriter, r *http.Request) {
@@ -239,17 +272,22 @@ func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var cmd struct {
-		Action string `json:"action"`
+		Action  string `json:"action"`
+		Command string `json:"command"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
 		httpError(w, "invalid request", http.StatusBadRequest)
 		return
 	}
 
-	s.logger.Info("received remote command", "action", cmd.Action)
+	action := strings.TrimSpace(cmd.Action)
+	if action == "" {
+		action = strings.TrimSpace(cmd.Command)
+	}
+	s.logger.Info("received remote command", "action", action)
 
 	var err error
-	switch cmd.Action {
+	switch action {
 	case "start":
 		err = s.node.Start()
 	case "stop":
@@ -340,4 +378,23 @@ func httpError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+func replaceOrAppendArg(args []string, prefix, replacement string) []string {
+	updated := make([]string, 0, len(args)+1)
+	replaced := false
+	for _, arg := range args {
+		if strings.HasPrefix(arg, prefix) {
+			if !replaced {
+				updated = append(updated, replacement)
+				replaced = true
+			}
+			continue
+		}
+		updated = append(updated, arg)
+	}
+	if !replaced {
+		updated = append(updated, replacement)
+	}
+	return updated
 }

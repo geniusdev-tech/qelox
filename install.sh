@@ -20,11 +20,13 @@ info "Instalando QELO-X para usuário: ${INSTALL_USER}"
 command -v go >/dev/null 2>&1 || error "Go não encontrado. Instale Go 1.22+: https://golang.org/dl/"
 info "Go version: $(go version)"
 
+VERSION="$(cat VERSION)"
+
 info "Criando estrutura de diretórios..."
 mkdir -p "${BINARY_DIR}" "${QELOX_BASE}/runtime" "${QELOX_BASE}/logs"
 
 info "Compilando qeloxd..."
-go build -ldflags="-s -w -X main.version=1.0.0" -o "${BINARY_DIR}/qeloxd" ./cmd/qeloxd/
+go build -ldflags="-s -w -X github.com/zeus/qelox/internal/buildinfo.Version=${VERSION}" -o "${BINARY_DIR}/qeloxd" ./cmd/qeloxd/
 
 info "Compilando qelox..."
 go build -ldflags="-s -w" -o "${BINARY_DIR}/qelox" ./cmd/qelox/

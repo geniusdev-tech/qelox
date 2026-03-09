@@ -242,7 +242,7 @@ func (m *Monitor) collect() {
 
 	// RAM e Métricas do processo go-quai especificamente.
 	if m.node.IsRunning() {
-		if pid := m.getGoQuaiPID(); pid > 0 {
+		if pid := m.node.PID(); pid > 0 {
 			if p, err := process.NewProcess(int32(pid)); err == nil {
 				if mi, err := p.MemoryInfo(); err == nil {
 					metrics.GoQuaiRAMBytes = mi.RSS
@@ -345,21 +345,6 @@ func (m *Monitor) collect() {
 	}
 
 	m.current = metrics
-}
-
-func (m *Monitor) getGoQuaiPID() int {
-	// Procura em /proc pelo processo go-quai.
-	procs, err := process.Processes()
-	if err != nil {
-		return 0
-	}
-	for _, p := range procs {
-		name, err := p.Name()
-		if err == nil && name == "go-quai" {
-			return int(p.Pid)
-		}
-	}
-	return 0
 }
 
 // queryNodeMetrics consulta RPC do go-quai.

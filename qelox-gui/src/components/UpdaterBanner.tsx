@@ -5,7 +5,7 @@ import { useOrchestratorStore } from '../store';
 export function UpdaterBanner() {
     const { update } = useOrchestratorStore();
 
-    if (!update.available) return null;
+    if (!update.available || update.dismissed) return null;
 
     return (
         <AnimatePresence>
@@ -24,14 +24,18 @@ export function UpdaterBanner() {
                     <button
                         className="flex items-center gap-2 bg-cyan-500 text-black px-3 py-1 rounded-sm font-bold hover:bg-cyan-400 transition-colors uppercase tracking-tighter text-xs"
                         onClick={() => {
-                            // In a real app, this would trigger the actual update process
-                            window.open('https://github.com/geniusdev-tech/qelox/releases/latest', '_blank');
+                            window.open('https://github.com/zeus/qelox/releases/latest', '_blank');
                         }}
                     >
                         <Download size={14} />
                         Update Now
                     </button>
-                    <button className="text-white/40 hover:text-white">
+                    <button
+                        className="text-white/40 hover:text-white"
+                        onClick={() => useOrchestratorStore.setState((state) => ({
+                            update: { ...state.update, dismissed: true }
+                        }))}
+                    >
                         <X size={16} />
                     </button>
                 </div>

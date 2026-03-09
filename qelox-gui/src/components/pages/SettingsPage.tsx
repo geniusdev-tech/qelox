@@ -2,6 +2,15 @@ import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useOrchestratorStore } from '../../store';
 
+const getEnvironmentArg = (extraArgs: string[] = []) =>
+    extraArgs.find((arg) => arg.startsWith('--node.environment='))?.split('=')[1] || 'colosseum';
+
+const replaceEnvironmentArg = (extraArgs: string[] = [], network: string) => {
+    const filtered = extraArgs.filter((arg) => !arg.startsWith('--node.environment='));
+    filtered.push(`--node.environment=${network}`);
+    return filtered;
+};
+
 export default function SettingsPage() {
     const { currentConfig, fetchConfig, saveConfig } = useOrchestratorStore();
 
@@ -22,7 +31,7 @@ export default function SettingsPage() {
         setRpcUrl(currentConfig.monitor?.rpc_url || '');
         setApiHost(currentConfig.web?.bind || '');
         setApiPort(String(currentConfig.web?.port || ''));
-        setNetwork(currentConfig.node?.extra_args?.[0]?.split('=')[1] || 'colosseum');
+        setNetwork(getEnvironmentArg(currentConfig.node?.extra_args));
         setAutoStart(currentConfig.node?.auto_start ?? true);
         setMaxRestarts(currentConfig.daemon?.max_restarts || 0);
     }, [currentConfig, fetchConfig]);
@@ -33,7 +42,11 @@ export default function SettingsPage() {
             monitor: { ...currentConfig.monitor, rpc_url: rpcUrl },
             web: { ...currentConfig.web, bind: apiHost, port: parseInt(apiPort) },
             daemon: { ...currentConfig.daemon, max_restarts: parseInt(String(maxRestarts)) },
-            node: { ...currentConfig.node, auto_start: autoStart }
+            node: {
+                ...currentConfig.node,
+                auto_start: autoStart,
+                extra_args: replaceEnvironmentArg(currentConfig.node?.extra_args, network)
+            }
         };
 
         const ok = await saveConfig(updated);

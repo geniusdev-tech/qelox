@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/zeus/qelox/internal/buildinfo"
 	"github.com/zeus/qelox/internal/config"
 	"github.com/zeus/qelox/internal/log"
 	"github.com/zeus/qelox/internal/monitor"
@@ -131,7 +132,7 @@ func (s *Server) dispatch(cmd string) Response {
 	case "metrics":
 		return Response{OK: true, Payload: s.mon.Snapshot()}
 	case "version":
-		return Response{OK: true, Payload: "qeloxd v1.1.0"}
+		return Response{OK: true, Payload: "qeloxd " + buildinfo.Version}
 	default:
 		return Response{Error: "unknown command: " + cmd}
 	}

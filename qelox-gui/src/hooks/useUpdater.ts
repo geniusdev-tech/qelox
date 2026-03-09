@@ -3,21 +3,20 @@ import { check } from '@tauri-apps/plugin-updater';
 import { useOrchestratorStore } from '../store';
 
 export function useUpdater() {
-    const setUpdate = useOrchestratorStore((state) => (val: any) => {
-        // @ts-ignore
-        state.update = val;
-    });
-
     useEffect(() => {
+        if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
+            return;
+        }
+
         async function checkUpdate() {
             try {
                 const update = await check();
                 if (update) {
-                    // @ts-ignore
                     useOrchestratorStore.setState({
                         update: {
                             available: true,
                             version: update.version,
+                            dismissed: false,
                         }
                     });
                 }

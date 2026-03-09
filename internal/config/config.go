@@ -11,57 +11,57 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+const (
+	envConfigPath = "QELOX_CONFIG"
+	envHomePath   = "QELOX_HOME"
+)
+
 // Config groups all daemon configuration.
 type Config struct {
-	Node    NodeConfig    `toml:"node"`
-	Daemon  DaemonConfig  `toml:"daemon"`
-	Monitor MonitorConfig `toml:"monitor"`
-	Web     WebConfig     `toml:"web"`
+	Node    NodeConfig    `toml:"node" json:"node"`
+	Daemon  DaemonConfig  `toml:"daemon" json:"daemon"`
+	Monitor MonitorConfig `toml:"monitor" json:"monitor"`
+	Web     WebConfig     `toml:"web" json:"web"`
 }
 
 // NodeConfig — go-quai binary configuration.
 type NodeConfig struct {
-	BinaryPath string   `toml:"binary_path"`
-	BaseDir    string   `toml:"base_dir"`
-	DataDir    string   `toml:"data_dir"`
-	MaxPeers   int      `toml:"max_peers"`
-	AutoStart  bool     `toml:"auto_start"`
-	ExtraArgs  []string `toml:"extra_args"`
+	BinaryPath string   `toml:"binary_path" json:"binary_path"`
+	BaseDir    string   `toml:"base_dir" json:"base_dir"`
+	DataDir    string   `toml:"data_dir" json:"data_dir"`
+	MaxPeers   int      `toml:"max_peers" json:"max_peers"`
+	AutoStart  bool     `toml:"auto_start" json:"auto_start"`
+	ExtraArgs  []string `toml:"extra_args" json:"extra_args"`
 }
 
 // DaemonConfig — qeloxd daemon behavior.
 type DaemonConfig struct {
-	SocketPath   string `toml:"socket_path"`
-	LockFile     string `toml:"lock_file"`
-	RestartDelay int    `toml:"restart_delay_sec"`
-	MaxRestarts  int    `toml:"max_restarts"`
+	SocketPath   string `toml:"socket_path" json:"socket_path"`
+	LockFile     string `toml:"lock_file" json:"lock_file"`
+	RestartDelay int    `toml:"restart_delay_sec" json:"restart_delay_sec"`
+	MaxRestarts  int    `toml:"max_restarts" json:"max_restarts"`
 }
 
 // MonitorConfig — metrics collection intervals.
 type MonitorConfig struct {
-	IntervalSec      int    `toml:"interval_sec"`
-	FreezeTimeoutMin int    `toml:"freeze_timeout_min"`
-	RPCURL           string `toml:"rpc_url"`
-	MinPeers         int    `toml:"min_peers"`
+	IntervalSec      int    `toml:"interval_sec" json:"interval_sec"`
+	FreezeTimeoutMin int    `toml:"freeze_timeout_min" json:"freeze_timeout_min"`
+	RPCURL           string `toml:"rpc_url" json:"rpc_url"`
+	MinPeers         int    `toml:"min_peers" json:"min_peers"`
 }
 
 // WebConfig — embedded web dashboard.
 type WebConfig struct {
-	Enabled  bool   `toml:"enabled"`
-	Port     int    `toml:"port"`
-	Bind     string `toml:"bind"`
-	Username string `toml:"username"`
-	Password string `toml:"password"`
+	Enabled  bool   `toml:"enabled" json:"enabled"`
+	Port     int    `toml:"port" json:"port"`
+	Bind     string `toml:"bind" json:"bind"`
+	Username string `toml:"username" json:"username"`
+	Password string `toml:"password" json:"password"`
 }
 
-// Load searches for config.toml in ~/qelox/config.toml.
+// Load searches for config.toml in QELOX_CONFIG or QELOX_HOME/config.toml.
 func Load() (*Config, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, err
-	}
-	path := filepath.Join(home, "qelox", "config.toml")
-
+	path := configPath()
 	cfg := defaults()
 	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
 		// No configuration file — use defaults.
@@ -78,11 +78,10 @@ func Save(cfg *Config) error {
 	if err := validate(cfg); err != nil {
 		return err
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
+	path := configPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
 		return err
 	}
-	path := filepath.Join(home, "qelox", "config.toml")
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -92,8 +91,8 @@ func Save(cfg *Config) error {
 }
 
 func defaults() *Config {
-	home, _ := os.UserHomeDir()
-	base := filepath.Join(home, "qelox")
+	home := userHomeDir()
+	base := basePath()
 	return &Config{
 		Node: NodeConfig{
 			BinaryPath: "/usr/local/bin/go-quai",
@@ -138,12 +137,32 @@ func validate(cfg *Config) error {
 
 // LogFile returns the daemons log file path.
 func (c *Config) LogFile() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, "qelox", "logs", "qeloxd.log")
+	return filepath.Join(basePath(), "logs", "qeloxd.log")
 }
 
 // NodeLogFile returns the go-quai log file path.
 func (c *Config) NodeLogFile() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, "qelox", "logs", "go-quai.log")
+	return filepath.Join(basePath(), "logs", "go-quai.log")
+}
+
+func configPath() string {
+	if path := os.Getenv(envConfigPath); path != "" {
+		return path
+	}
+	return filepath.Join(basePath(), "config.toml")
+}
+
+func basePath() string {
+	if path := os.Getenv(envHomePath); path != "" {
+		return path
+	}
+	return filepath.Join(userHomeDir(), "qelox")
+}
+
+func userHomeDir() string {
+	home, err := os.UserHomeDir()
+	if err == nil && home != "" {
+		return home
+	}
+	return os.Getenv("HOME")
 }
